@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Sleep Serenity App",
-    "slug": "sleep-serenity-app-h5b5ove",
+    "name": "Selene Sleep App",
+    "slug": "selene-sleep-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -15,14 +15,14 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.rork.sleep-serenity-app-h5b5ove"
+      "bundleIdentifier": "com.yogawakeup.selene"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.sleep_serenity_app_h5b5ove"
+      "package": "com.yogawakeup.selene"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
