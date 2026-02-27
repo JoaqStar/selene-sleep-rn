@@ -10,6 +10,8 @@ web-build/
 expo-env.d.ts
 
 # Native
+ios/
+android/
 *.orig.*
 *.jks
 *.p8
@@ -43,5 +45,3 @@ rork-eslint.config.js
 core
 node_modules
 .expo
-ios/
-android/
