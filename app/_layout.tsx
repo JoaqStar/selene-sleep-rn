@@ -4,6 +4,7 @@ import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 
@@ -60,8 +61,10 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <StatusBar style="light" />
-        <RootLayoutNav />
+        <SafeAreaProvider>
+          <StatusBar style="light" />
+          <RootLayoutNav />
+        </SafeAreaProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>
   );
