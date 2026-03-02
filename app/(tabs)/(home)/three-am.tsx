@@ -3,11 +3,13 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Animated } from 'react-n
 import { LinearGradient } from 'expo-linear-gradient';
 import { Flame, Brain, Heart } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { usePlayerStore } from '@/stores/playerStore';
 import { THREE_AM_CATEGORIES, getThreeAmSessions } from '@/mocks/sessions';
 import { Session } from '@/types';
 import SessionCard from '@/components/SessionCard';
+import { ScreenHeader } from '@/components/ScreenHeader';
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   'Hot & restless': <Flame size={18} color={Colors.accent} />,
@@ -24,6 +26,7 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
 export default function ThreeAmScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string>(THREE_AM_CATEGORIES[0]);
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { setCurrentSession } = usePlayerStore();
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -48,9 +51,10 @@ export default function ThreeAmScreen() {
       style={styles.container}
     >
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: 40 }]}
         showsVerticalScrollIndicator={false}
       >
+        <ScreenHeader title="3am Mode" backLabel="Home" />
         <Animated.View style={{ opacity: fadeAnim }}>
           <Text style={styles.heroText}>It's okay to be awake.</Text>
           <Text style={styles.heroSubtext}>What's happening right now?</Text>
@@ -107,8 +111,6 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 40,
   },
   heroText: {
     fontSize: 26,

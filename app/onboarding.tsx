@@ -65,7 +65,7 @@ export default function OnboardingScreen() {
       style={styles.container}
     >
       <KeyboardAvoidingView
-        style={[styles.inner, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 40 }]}
+        style={[styles.inner, { paddingTop: insets.top + 60 }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <Animated.View style={[styles.moonContainer, { transform: [{ translateY: moonTranslateY }] }]}>
@@ -102,7 +102,7 @@ export default function OnboardingScreen() {
           )}
         </Animated.View>
 
-        <Animated.View style={{ opacity: fadeAnim }}>
+        <Animated.View style={[styles.footer, { paddingBottom: insets.bottom + 32, opacity: fadeAnim }]}>
           <Pressable
             onPress={handleContinue}
             onPressIn={() => {
@@ -132,6 +132,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 32,
     justifyContent: 'space-between',
+  },
+  footer: {
+    alignItems: 'center',
   },
   moonContainer: {
     alignItems: 'center',

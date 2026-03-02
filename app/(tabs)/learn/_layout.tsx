@@ -16,8 +16,7 @@ export default function LearnLayout() {
       <Stack.Screen
         name="[articleId]"
         options={{
-          title: 'Article',
-          headerBackTitle: 'Learn',
+          headerShown: false,
         }}
       />
     </Stack>

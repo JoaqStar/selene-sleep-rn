@@ -16,8 +16,7 @@ export default function HomeLayout() {
       <Stack.Screen
         name="three-am"
         options={{
-          title: '3am Mode',
-          headerBackTitle: 'Home',
+          headerShown: false,
         }}
       />
     </Stack>

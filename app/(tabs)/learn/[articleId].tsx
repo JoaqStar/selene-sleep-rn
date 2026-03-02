@@ -7,6 +7,7 @@ import Colors from '@/constants/colors';
 import { ARTICLES } from '@/mocks/articles';
 import { SESSIONS } from '@/mocks/sessions';
 import { usePlayerStore } from '@/stores/playerStore';
+import { ScreenHeader } from '@/components/ScreenHeader';
 
 export default function ArticleDetailScreen() {
   const { articleId } = useLocalSearchParams<{ articleId: string }>();
@@ -45,6 +46,7 @@ export default function ArticleDetailScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        <ScreenHeader title="Article" backLabel="Learn" />
         <View style={styles.metaRow}>
           <View style={styles.categoryBadge}>
             <BookOpen size={11} color={Colors.accent} />
