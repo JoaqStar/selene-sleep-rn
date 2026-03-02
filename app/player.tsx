@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Pressable, Animated, ActivityIndicator, Platform,
 } from 'react-native';
@@ -26,7 +26,7 @@ export default function PlayerScreen() {
     setIsPlaying, setPosition, setDuration, setIsBuffering, clearSession,
   } = usePlayerStore();
 
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
   const playButtonScale = useRef(new Animated.Value(1)).current;
@@ -87,7 +87,7 @@ export default function PlayerScreen() {
         );
 
         if (mounted) {
-          setSound(newSound);
+          soundRef.current = newSound;
           setIsPlaying(true);
           console.log('Audio loaded and playing');
         }
@@ -105,18 +105,20 @@ export default function PlayerScreen() {
     return () => {
       mounted = false;
     };
-  }, [currentSession?.id]);
+  }, [currentSession?.id, setIsPlaying, setIsBuffering, setPosition, setDuration]);
 
   useEffect(() => {
     return () => {
-      if (sound) {
-        console.log('Unloading sound');
-        sound.unloadAsync();
+      if (soundRef.current) {
+        console.log('Unloading sound on unmount');
+        soundRef.current.unloadAsync();
+        soundRef.current = null;
       }
     };
-  }, [sound]);
+  }, []);
 
   const handlePlayPause = useCallback(async () => {
+    const sound = soundRef.current;
     if (!sound) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Animated.sequence([
@@ -129,24 +131,33 @@ export default function PlayerScreen() {
     } else {
       await sound.playAsync();
     }
-  }, [sound, isPlaying, playButtonScale]);
+  }, [isPlaying, playButtonScale]);
 
   const handleSeek = useCallback(async (offsetMs: number) => {
+    const sound = soundRef.current;
     if (!sound) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const newPosition = Math.max(0, Math.min(positionMillis + offsetMs, durationMillis));
     await sound.setPositionAsync(newPosition);
-  }, [sound, positionMillis, durationMillis]);
+  }, [positionMillis, durationMillis]);
 
   const handleClose = useCallback(async () => {
-    if (sound) {
-      await sound.stopAsync();
-      await sound.unloadAsync();
-      setSound(null);
+    if (soundRef.current) {
+      try {
+        await soundRef.current.stopAsync();
+      } catch (e) {
+        console.warn('Error stopping sound on close', e);
+      }
+      try {
+        await soundRef.current.unloadAsync();
+      } catch (e) {
+        console.warn('Error unloading sound on close', e);
+      }
+      soundRef.current = null;
     }
     clearSession();
     router.back();
-  }, [sound, clearSession, router]);
+  }, [clearSession, router]);
 
   if (!currentSession) {
     return (
@@ -166,7 +177,7 @@ export default function PlayerScreen() {
       colors={[Colors.playerGradientStart, '#12102A', Colors.playerGradientEnd]}
       style={styles.container}
     >
-      <View style={[styles.inner, { paddingTop: insets.top + 10, paddingBottom: insets.bottom + 20 }]}>
+      <View style={[styles.inner, { paddingTop: insets.top, paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.topBar}>
           <Pressable onPress={handleClose} style={styles.closeButton} testID="player-close">
             <X size={22} color={Colors.textSecondary} />

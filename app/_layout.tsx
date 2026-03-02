@@ -46,7 +46,7 @@ function RootLayoutNav() {
         <Stack.Screen
           name="player"
           options={{
-            presentation: 'modal',
+            presentation: 'fullScreenModal',
             headerShown: false,
             animation: 'slide_from_bottom',
           }}
