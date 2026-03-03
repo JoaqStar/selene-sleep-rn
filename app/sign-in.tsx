@@ -12,8 +12,7 @@ export default function SignInScreen() {
   const [email, setEmail] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isSent, setIsSent] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [isVerifying, setIsVerifying] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -58,7 +57,7 @@ export default function SignInScreen() {
       } else {
         console.log('[SignIn] Magic link sent to:', trimmed);
         setIsSent(true);
-        setOtp('');
+        setIsPolling(true);
         Animated.timing(sentFade, { toValue: 1, duration: 500, useNativeDriver: true }).start();
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
@@ -70,42 +69,25 @@ export default function SignInScreen() {
     }
   }, [email, sentFade, router]);
 
-  const handleVerifyOtp = useCallback(async () => {
-    const trimmed = email.trim().toLowerCase();
-    const code = otp.trim();
-    if (!code || code.length < 6) {
-      setError('Please enter the 6-digit code from your email');
-      return;
-    }
-
-    setError('');
-    setIsVerifying(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    try {
-      console.log('[SignIn] Verifying OTP for:', trimmed);
-      const { data, error: verifyError } = await supabase.auth.verifyOtp({
-        email: trimmed,
-        token: code,
-        type: 'email',
-      });
-      if (verifyError) {
-        console.error('[SignIn] OTP verify error:', verifyError);
-        setError(verifyError.message);
-      } else if (data.session) {
-        console.log('[SignIn] OTP verified, session active');
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.replace('/(tabs)');
-      } else {
-        setError('Verification failed. Please try again.');
+  useEffect(() => {
+    if (!isPolling) return;
+    console.log('[SignIn] Starting session polling...');
+    const interval = setInterval(async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        console.log('[SignIn] Poll — session:', session ? 'found' : 'none');
+        if (session) {
+          clearInterval(interval);
+          setIsPolling(false);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          router.replace('/(tabs)');
+        }
+      } catch (e) {
+        console.error('[SignIn] Poll error:', e);
       }
-    } catch (e) {
-      console.error('[SignIn] OTP verify unexpected error:', e);
-      setError('Something went wrong. Please try again.');
-    } finally {
-      setIsVerifying(false);
-    }
-  }, [email, otp, router]);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [isPolling, router]);
 
   const moonTranslateY = moonAnim.interpolate({
     inputRange: [0, 1],
@@ -166,52 +148,25 @@ export default function SignInScreen() {
               </View>
               <Text style={styles.title}>Check your inbox</Text>
               <Text style={styles.subtitle}>
-                We sent a code to{'\n'}
+                We sent a magic link to{'\n'}
                 <Text style={styles.emailHighlight}>{email.trim().toLowerCase()}</Text>
-                {'\n\n'}Enter the 6-digit code from the email to sign in.
+                {'\n\n'}Tap the link in the email to sign in. This page will update automatically.
               </Text>
 
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={[styles.input, styles.otpInput]}
-                  placeholder="000000"
-                  placeholderTextColor={Colors.textMuted}
-                  value={otp}
-                  onChangeText={(text) => {
-                    setOtp(text.replace(/[^0-9]/g, '').slice(0, 6));
-                    if (error) setError('');
-                  }}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  autoFocus
-                  returnKeyType="done"
-                  onSubmitEditing={handleVerifyOtp}
-                  editable={!isVerifying}
-                  testID="sign-in-otp-input"
-                />
-              </View>
+              {isPolling && (
+                <View style={styles.pollingContainer}>
+                  <ActivityIndicator size="small" color={Colors.accent} />
+                  <Text style={styles.pollingText}>Waiting for sign-in...</Text>
+                </View>
+              )}
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
               <Pressable
-                onPress={handleVerifyOtp}
-                disabled={isVerifying}
-                testID="sign-in-verify-button"
-              >
-                <View style={[styles.button, styles.verifyButton, isVerifying ? { opacity: 0.7 } : undefined]}>
-                  {isVerifying ? (
-                    <ActivityIndicator size="small" color={Colors.background} />
-                  ) : (
-                    <Text style={styles.buttonText}>Verify code</Text>
-                  )}
-                </View>
-              </Pressable>
-
-              <Pressable
                 onPress={() => {
                   setIsSent(false);
+                  setIsPolling(false);
                   setEmail('');
-                  setOtp('');
                   setError('');
                 }}
                 testID="sign-in-try-again-button"
@@ -329,15 +284,16 @@ const styles = StyleSheet.create({
     color: Colors.accent,
     fontWeight: '500' as const,
   },
-  otpInput: {
-    textAlign: 'center' as const,
-    fontSize: 24,
-    letterSpacing: 8,
-    fontWeight: '600' as const,
+  pollingContainer: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 10,
+    marginBottom: 16,
   },
-  verifyButton: {
-    marginTop: 20,
-    alignSelf: 'center' as const,
+  pollingText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
   },
   tryAgainText: {
     color: Colors.accent,
