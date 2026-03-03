@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Moon, Mail, ArrowRight, CheckCircle } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import * as Linking from 'expo-linking';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 
@@ -45,7 +46,9 @@ export default function SignInScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      const { error: otpError } = await supabase.auth.signInWithOtp({ email: trimmed });
+      const redirectUrl = Linking.createURL('/');
+      console.log('[SignIn] Redirect URL:', redirectUrl);
+      const { error: otpError } = await supabase.auth.signInWithOtp({ email: trimmed, options: { emailRedirectTo: redirectUrl } });
       if (otpError) {
         console.error('[SignIn] OTP error:', otpError);
         setError(otpError.message);
