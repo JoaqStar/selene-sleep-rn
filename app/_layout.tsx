@@ -7,6 +7,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useOnboardingStore } from "@/stores/onboardingStore";
+import { useAuthStore } from "@/stores/authStore";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -14,30 +15,38 @@ const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   const { isOnboarded, isLoading, loadOnboardingState } = useOnboardingStore();
+  const { session, isLoading: isAuthLoading, initialize } = useAuthStore();
 
   useEffect(() => {
     loadOnboardingState();
+    const unsubscribe = initialize();
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
-    if (!isLoading) {
+    if (!isLoading && !isAuthLoading) {
       SplashScreen.hideAsync();
     }
-  }, [isLoading]);
+  }, [isLoading, isAuthLoading]);
 
-  if (isLoading) {
+  if (isLoading || isAuthLoading) {
     return null;
   }
 
   return (
     <>
-      {!isOnboarded && <Redirect href="/onboarding" />}
+      {!session && <Redirect href="/sign-in" />}
+      {session && !isOnboarded && <Redirect href="/onboarding" />}
       <Stack
         screenOptions={{
           headerBackTitle: "Back",
           contentStyle: { backgroundColor: Colors.background },
         }}
       >
+        <Stack.Screen
+          name="sign-in"
+          options={{ headerShown: false, animation: 'fade' }}
+        />
         <Stack.Screen
           name="onboarding"
           options={{ headerShown: false, animation: 'fade' }}
