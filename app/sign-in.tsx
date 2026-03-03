@@ -5,7 +5,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Moon, Mail, ArrowRight, CheckCircle } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import * as Linking from 'expo-linking';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 
@@ -13,8 +12,9 @@ export default function SignInScreen() {
   const [email, setEmail] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isSent, setIsSent] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState('');
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -58,22 +58,9 @@ export default function SignInScreen() {
       } else {
         console.log('[SignIn] Magic link sent to:', trimmed);
         setIsSent(true);
+        setOtp('');
         Animated.timing(sentFade, { toValue: 1, duration: 500, useNativeDriver: true }).start();
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-        pollingRef.current = setInterval(async () => {
-          try {
-            const { data: { session } } = await supabase.auth.getSession();
-            console.log('[SignIn] Polling session:', session ? 'found' : 'none');
-            if (session) {
-              if (pollingRef.current) clearInterval(pollingRef.current);
-              pollingRef.current = null;
-              router.replace('/(tabs)');
-            }
-          } catch (pollErr) {
-            console.error('[SignIn] Polling error:', pollErr);
-          }
-        }, 3000);
       }
     } catch (e) {
       console.error('[SignIn] Unexpected error:', e);
@@ -83,14 +70,42 @@ export default function SignInScreen() {
     }
   }, [email, sentFade, router]);
 
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
+  const handleVerifyOtp = useCallback(async () => {
+    const trimmed = email.trim().toLowerCase();
+    const code = otp.trim();
+    if (!code || code.length < 6) {
+      setError('Please enter the 6-digit code from your email');
+      return;
+    }
+
+    setError('');
+    setIsVerifying(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      console.log('[SignIn] Verifying OTP for:', trimmed);
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({
+        email: trimmed,
+        token: code,
+        type: 'email',
+      });
+      if (verifyError) {
+        console.error('[SignIn] OTP verify error:', verifyError);
+        setError(verifyError.message);
+      } else if (data.session) {
+        console.log('[SignIn] OTP verified, session active');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        router.replace('/(tabs)');
+      } else {
+        setError('Verification failed. Please try again.');
       }
-    };
-  }, []);
+    } catch (e) {
+      console.error('[SignIn] OTP verify unexpected error:', e);
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setIsVerifying(false);
+    }
+  }, [email, otp, router]);
 
   const moonTranslateY = moonAnim.interpolate({
     inputRange: [0, 1],
@@ -151,14 +166,53 @@ export default function SignInScreen() {
               </View>
               <Text style={styles.title}>Check your inbox</Text>
               <Text style={styles.subtitle}>
-                We sent a magic link to{'\n'}
+                We sent a code to{'\n'}
                 <Text style={styles.emailHighlight}>{email.trim().toLowerCase()}</Text>
-                {'\n\n'}Tap the link in the email to sign in.
+                {'\n\n'}Enter the 6-digit code from the email to sign in.
               </Text>
+
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={[styles.input, styles.otpInput]}
+                  placeholder="000000"
+                  placeholderTextColor={Colors.textMuted}
+                  value={otp}
+                  onChangeText={(text) => {
+                    setOtp(text.replace(/[^0-9]/g, '').slice(0, 6));
+                    if (error) setError('');
+                  }}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleVerifyOtp}
+                  editable={!isVerifying}
+                  testID="sign-in-otp-input"
+                />
+              </View>
+
+              {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+              <Pressable
+                onPress={handleVerifyOtp}
+                disabled={isVerifying}
+                testID="sign-in-verify-button"
+              >
+                <View style={[styles.button, styles.verifyButton, isVerifying ? { opacity: 0.7 } : undefined]}>
+                  {isVerifying ? (
+                    <ActivityIndicator size="small" color={Colors.background} />
+                  ) : (
+                    <Text style={styles.buttonText}>Verify code</Text>
+                  )}
+                </View>
+              </Pressable>
+
               <Pressable
                 onPress={() => {
                   setIsSent(false);
                   setEmail('');
+                  setOtp('');
+                  setError('');
                 }}
                 testID="sign-in-try-again-button"
               >
@@ -274,6 +328,16 @@ const styles = StyleSheet.create({
   emailHighlight: {
     color: Colors.accent,
     fontWeight: '500' as const,
+  },
+  otpInput: {
+    textAlign: 'center' as const,
+    fontSize: 24,
+    letterSpacing: 8,
+    fontWeight: '600' as const,
+  },
+  verifyButton: {
+    marginTop: 20,
+    alignSelf: 'center' as const,
   },
   tryAgainText: {
     color: Colors.accent,
