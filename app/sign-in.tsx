@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useRouter } from 'expo-router';
 import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Moon, Mail, ArrowRight, CheckCircle } from 'lucide-react-native';
@@ -13,6 +14,8 @@ export default function SignInScreen() {
   const [isSending, setIsSending] = useState(false);
   const [isSent, setIsSent] = useState(false);
   const [error, setError] = useState('');
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -46,7 +49,7 @@ export default function SignInScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      const redirectUrl = Linking.createURL('/');
+      const redirectUrl = __DEV__ ? undefined : 'selenesleepapp://';
       console.log('[SignIn] Redirect URL:', redirectUrl);
       const { error: otpError } = await supabase.auth.signInWithOtp({ email: trimmed, options: { emailRedirectTo: redirectUrl } });
       if (otpError) {
@@ -57,6 +60,20 @@ export default function SignInScreen() {
         setIsSent(true);
         Animated.timing(sentFade, { toValue: 1, duration: 500, useNativeDriver: true }).start();
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+        pollingRef.current = setInterval(async () => {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            console.log('[SignIn] Polling session:', session ? 'found' : 'none');
+            if (session) {
+              if (pollingRef.current) clearInterval(pollingRef.current);
+              pollingRef.current = null;
+              router.replace('/(tabs)');
+            }
+          } catch (pollErr) {
+            console.error('[SignIn] Polling error:', pollErr);
+          }
+        }, 3000);
       }
     } catch (e) {
       console.error('[SignIn] Unexpected error:', e);
@@ -64,7 +81,16 @@ export default function SignInScreen() {
     } finally {
       setIsSending(false);
     }
-  }, [email, sentFade]);
+  }, [email, sentFade, router]);
+
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, []);
 
   const moonTranslateY = moonAnim.interpolate({
     inputRange: [0, 1],
