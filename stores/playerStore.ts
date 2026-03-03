@@ -24,7 +24,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
 
   setCurrentSession: (session: Session) => {
     console.log('Setting current session:', session.title);
-    set({ currentSession: session, positionMillis: 0, durationMillis: session.duration * 60 * 1000 });
+    set({ currentSession: session, positionMillis: 0, durationMillis: session.duration_seconds * 1000 });
   },
 
   setIsPlaying: (playing: boolean) => set({ isPlaying: playing }),

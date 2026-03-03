@@ -5,7 +5,7 @@ import { BookOpen } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
-import { ARTICLES } from '@/mocks/articles';
+import { useArticles } from '@/lib/hooks/useArticlesQuery';
 import { Article } from '@/types';
 import ArticleCard from '@/components/ArticleCard';
 
@@ -15,19 +15,23 @@ export default function LearnScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [activeCategory, setActiveCategory] = useState<string>('All');
+  const { data, isLoading } = useArticles();
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const articles = data ?? [];
+  const filteredArticles = activeCategory === 'All'
+    ? articles
+    : articles.filter((a) => a.category === activeCategory);
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
   }, []);
 
-  const filteredArticles = activeCategory === 'All'
-    ? ARTICLES
-    : ARTICLES.filter((a) => a.category === activeCategory);
-
   const handleArticlePress = useCallback((article: Article) => {
     router.push(`/(tabs)/learn/${article.id}`);
   }, [router]);
+
+  if (isLoading) return null;
 
   return (
     <LinearGradient

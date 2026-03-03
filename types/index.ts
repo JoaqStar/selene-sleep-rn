@@ -1,23 +1,26 @@
 export interface Session {
-  id: string;
+  id: number;
   title: string;
-  instructor: string;
-  duration: number;
+  description: string;
+  duration_seconds: number;
   category: string;
-  subcategory?: string;
-  audioUrl: string;
-  description?: string;
+  mood_tag: string;
+  audio_url: string;
+  is_published: boolean;
+  sort_order: number;
+  instructor?: string;
 }
 
 export interface Article {
-  id: string;
-  category: string;
-  voice: string;
-  readTime: number;
+  id: number;
   title: string;
   standfirst: string;
   body: string;
-  relatedSessionId: string;
+  category: string;
+  author: string;
+  related_session_id: number | null;
+  is_published: boolean;
+  readTime?: string;
 }
 
 export interface Comment {

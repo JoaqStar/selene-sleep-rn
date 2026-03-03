@@ -4,8 +4,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Clock, Play, BookOpen } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
-import { ARTICLES } from '@/mocks/articles';
-import { SESSIONS } from '@/mocks/sessions';
+import { useArticles } from '@/lib/hooks/useArticlesQuery';
+import { useSessions } from '@/lib/hooks/useSessionsQuery';
 import { usePlayerStore } from '@/stores/playerStore';
 import { ScreenHeader } from '@/components/ScreenHeader';
 
@@ -13,11 +13,14 @@ export default function ArticleDetailScreen() {
   const { articleId } = useLocalSearchParams<{ articleId: string }>();
   const router = useRouter();
   const { setCurrentSession } = usePlayerStore();
+  const { data: articles } = useArticles();
+  const { data: sessions } = useSessions();
 
-  const article = ARTICLES.find((a) => a.id === articleId);
+  const id = parseInt(articleId as string, 10);
+  const article = (articles ?? []).find((a) => a.id === id);
 
-  const relatedSession = article
-    ? SESSIONS.find((s) => s.id === article.relatedSessionId)
+  const relatedSession = article?.related_session_id
+    ? (sessions ?? []).find((s) => s.id === article.related_session_id)
     : undefined;
 
   const handlePlayRelated = useCallback(() => {
@@ -52,17 +55,19 @@ export default function ArticleDetailScreen() {
             <BookOpen size={11} color={Colors.accent} />
             <Text style={styles.categoryText}>{article.category}</Text>
           </View>
-          <View style={styles.readTimeRow}>
-            <Clock size={12} color={Colors.textMuted} />
-            <Text style={styles.readTime}>{article.readTime} min read</Text>
-          </View>
+          {article.readTime ? (
+            <View style={styles.readTimeRow}>
+              <Clock size={12} color={Colors.textMuted} />
+              <Text style={styles.readTime}>{article.readTime}</Text>
+            </View>
+          ) : null}
         </View>
 
         <Text style={styles.title}>{article.title}</Text>
         <Text style={styles.standfirst}>{article.standfirst}</Text>
 
         <View style={styles.voiceBadge}>
-          <Text style={styles.voiceText}>{article.voice}</Text>
+          <Text style={styles.voiceText}>{article.author}</Text>
         </View>
 
         <View style={styles.divider} />
@@ -82,7 +87,7 @@ export default function ArticleDetailScreen() {
                 <View style={styles.relatedContent}>
                   <Text style={styles.relatedTitle}>{relatedSession.title}</Text>
                   <Text style={styles.relatedInstructor}>
-                    {relatedSession.instructor} · {relatedSession.duration} min
+                    {relatedSession.instructor ? `${relatedSession.instructor} · ` : ''}{Math.round(relatedSession.duration_seconds / 60)} min
                   </Text>
                 </View>
                 <View style={styles.playButton}>

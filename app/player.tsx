@@ -67,7 +67,7 @@ export default function PlayerScreen() {
         });
 
         const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: currentSession.audioUrl },
+          { uri: currentSession.audio_url },
           { shouldPlay: true, progressUpdateIntervalMillis: 500 },
           (status) => {
             if (!mounted) return;
@@ -198,7 +198,7 @@ export default function PlayerScreen() {
           </Animated.View>
 
           <Text style={styles.sessionTitle}>{currentSession.title}</Text>
-          <Text style={styles.sessionInstructor}>{currentSession.instructor}</Text>
+          {currentSession.instructor ? <Text style={styles.sessionInstructor}>{currentSession.instructor}</Text> : null}
           {currentSession.description ? (
             <Text style={styles.sessionDescription} numberOfLines={2}>{currentSession.description}</Text>
           ) : null}

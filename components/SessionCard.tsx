@@ -50,10 +50,10 @@ export default React.memo(function SessionCard({ session, onPress, compact = fal
           >
             <View style={styles.compactContent}>
               <Text style={styles.compactTitle} numberOfLines={2}>{session.title}</Text>
-              <Text style={styles.instructor}>{session.instructor}</Text>
+              {session.instructor ? <Text style={styles.instructor}>{session.instructor}</Text> : null}
               <View style={styles.metaRow}>
                 <Clock size={12} color={Colors.textMuted} />
-                <Text style={styles.duration}>{session.duration} min</Text>
+                <Text style={styles.duration}>{Math.round(session.duration_seconds / 60)} min</Text>
               </View>
             </View>
             <View style={styles.playButtonSmall}>
@@ -82,7 +82,7 @@ export default React.memo(function SessionCard({ session, onPress, compact = fal
           <View style={styles.cardContent}>
             <View style={styles.textContent}>
               <Text style={styles.title} numberOfLines={2}>{session.title}</Text>
-              <Text style={styles.instructor}>{session.instructor}</Text>
+              {session.instructor ? <Text style={styles.instructor}>{session.instructor}</Text> : null}
               {session.description ? (
                 <Text style={styles.description} numberOfLines={2}>{session.description}</Text>
               ) : null}
@@ -90,7 +90,7 @@ export default React.memo(function SessionCard({ session, onPress, compact = fal
             <View style={styles.rightSection}>
               <View style={styles.metaRow}>
                 <Clock size={13} color={Colors.textMuted} />
-                <Text style={styles.duration}>{session.duration} min</Text>
+                <Text style={styles.duration}>{Math.round(session.duration_seconds / 60)} min</Text>
               </View>
               <View style={styles.playButton}>
                 <Play size={18} color={Colors.accent} fill={Colors.accent} />

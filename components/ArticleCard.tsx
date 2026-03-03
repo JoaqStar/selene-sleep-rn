@@ -40,13 +40,13 @@ export default React.memo(function ArticleCard({ article, onPress }: ArticleCard
             </View>
             <View style={styles.metaRow}>
               <Clock size={11} color={Colors.textMuted} />
-              <Text style={styles.readTime}>{article.readTime} min</Text>
+              {article.readTime ? <Text style={styles.readTime}>{article.readTime}</Text> : null}
             </View>
           </View>
           <Text style={styles.title} numberOfLines={2}>{article.title}</Text>
           <Text style={styles.standfirst} numberOfLines={2}>{article.standfirst}</Text>
           <View style={styles.bottomRow}>
-            <Text style={styles.voice}>{article.voice}</Text>
+            <Text style={styles.voice}>{article.author}</Text>
             <ChevronRight size={16} color={Colors.textMuted} />
           </View>
         </View>

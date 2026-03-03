@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { usePlayerStore } from '@/stores/playerStore';
-import { TONIGHT_SESSIONS } from '@/mocks/sessions';
+import { useSessions } from '@/lib/hooks/useSessionsQuery';
 import { Session } from '@/types';
 import SessionCard from '@/components/SessionCard';
 
@@ -16,8 +16,11 @@ export default function HomeScreen() {
   const router = useRouter();
   const { userName } = useOnboardingStore();
   const { setCurrentSession } = usePlayerStore();
+  const { data, isLoading } = useSessions();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+
+  const tonightSessions = data ?? [];
 
   useEffect(() => {
     Animated.parallel([
@@ -89,7 +92,7 @@ export default function HomeScreen() {
           <Text style={styles.sectionSubtitle}>Drift off with these guided meditations</Text>
         </Animated.View>
 
-        {TONIGHT_SESSIONS.map((session) => (
+        {tonightSessions.map((session) => (
           <Animated.View key={session.id} style={{ opacity: fadeAnim }}>
             <SessionCard session={session} onPress={handleSessionPress} />
           </Animated.View>
@@ -98,7 +101,7 @@ export default function HomeScreen() {
         <Animated.View style={{ opacity: fadeAnim }}>
           <Text style={styles.sectionTitle}>Quick Listen</Text>
           <FlatList
-            data={TONIGHT_SESSIONS}
+            data={tonightSessions}
             renderItem={renderCompactSession}
             keyExtractor={(item) => `compact-${item.id}`}
             horizontal

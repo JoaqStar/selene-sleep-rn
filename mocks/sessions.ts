@@ -1,8 +1,6 @@
-import { Session } from '@/types';
-
 const BASE = 'https://selene-sleep-app.s3.us-east-1.amazonaws.com';
 
-export const SESSIONS: Session[] = [
+export const SESSIONS: any[] = [
   {
     id: 'soften-into-sleep',
     title: 'Soften Into Sleep',
@@ -170,6 +168,6 @@ export const TONIGHT_SESSIONS = SESSIONS.filter(s => s.category === 'tonight');
 export const SLEEP_SESSIONS = SESSIONS.filter(s => s.category === 'sleep');
 export const THREE_AM_CATEGORIES = ['Hot & restless', 'Racing mind', 'Lean into this hour'] as const;
 
-export function getThreeAmSessions(subcategory: string): Session[] {
+export function getThreeAmSessions(subcategory: string): any[] {
   return SESSIONS.filter(s => s.category === '3am' && s.subcategory === subcategory);
 }

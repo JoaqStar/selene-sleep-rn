@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { usePlayerStore } from '@/stores/playerStore';
-import { SLEEP_SESSIONS } from '@/mocks/sessions';
+import { useSessions } from '@/lib/hooks/useSessionsQuery';
 import { Session } from '@/types';
 import SessionCard from '@/components/SessionCard';
 
@@ -14,7 +14,10 @@ export default function SleepScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { setCurrentSession } = usePlayerStore();
+  const { data, isLoading } = useSessions();
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const sleepSessions = (data ?? []).filter(s => s.mood_tag === "can't sleep");
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
@@ -24,6 +27,8 @@ export default function SleepScreen() {
     setCurrentSession(session);
     router.push('/player');
   }, [setCurrentSession, router]);
+
+  if (isLoading) return null;
 
   return (
     <LinearGradient
@@ -47,7 +52,7 @@ export default function SleepScreen() {
         </Animated.View>
 
         <Animated.View style={{ opacity: fadeAnim }}>
-          {SLEEP_SESSIONS.map((session) => (
+          {sleepSessions.map((session) => (
             <SessionCard key={session.id} session={session} onPress={handleSessionPress} />
           ))}
         </Animated.View>

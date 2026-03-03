@@ -6,21 +6,25 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { usePlayerStore } from '@/stores/playerStore';
-import { THREE_AM_CATEGORIES, getThreeAmSessions } from '@/mocks/sessions';
+import { useSessionsByMoodTag } from '@/lib/hooks/useSessionsQuery';
 import { Session } from '@/types';
 import SessionCard from '@/components/SessionCard';
 import { ScreenHeader } from '@/components/ScreenHeader';
 
+const THREE_AM_CATEGORIES = ["can't sleep", 'hot & restless', 'racing mind', 'lean into this hour'] as const;
+
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  'Hot & restless': <Flame size={18} color={Colors.accent} />,
-  'Racing mind': <Brain size={18} color={Colors.accent} />,
-  'Lean into this hour': <Heart size={18} color={Colors.accent} />,
+  "can't sleep": <Flame size={18} color={Colors.accent} />,
+  'hot & restless': <Flame size={18} color={Colors.accent} />,
+  'racing mind': <Brain size={18} color={Colors.accent} />,
+  'lean into this hour': <Heart size={18} color={Colors.accent} />,
 };
 
 const CATEGORY_DESCRIPTIONS: Record<string, string> = {
-  'Hot & restless': 'Cooling techniques for night sweats and overheating',
-  'Racing mind': 'Calm a mind that won\'t switch off',
-  'Lean into this hour': 'Embrace the quiet of the night',
+  "can't sleep": 'Gentle guidance to help you drift off',
+  'hot & restless': 'Cooling techniques for night sweats and overheating',
+  'racing mind': 'Calm a mind that won\'t switch off',
+  'lean into this hour': 'Embrace the quiet of the night',
 };
 
 export default function ThreeAmScreen() {
@@ -29,6 +33,20 @@ export default function ThreeAmScreen() {
   const insets = useSafeAreaInsets();
   const { setCurrentSession } = usePlayerStore();
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const { data: cantSleepSessions } = useSessionsByMoodTag("can't sleep");
+  const { data: hotSessions } = useSessionsByMoodTag("hot & restless");
+  const { data: racingMindSessions } = useSessionsByMoodTag("racing mind");
+  const { data: leanInSessions } = useSessionsByMoodTag("lean into this hour");
+
+  const sessionsByCategory: Record<string, Session[]> = {
+    "can't sleep": cantSleepSessions ?? [],
+    'hot & restless': hotSessions ?? [],
+    'racing mind': racingMindSessions ?? [],
+    'lean into this hour': leanInSessions ?? [],
+  };
+
+  const sessions = sessionsByCategory[selectedCategory] ?? [];
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
@@ -42,8 +60,6 @@ export default function ThreeAmScreen() {
     setCurrentSession(session);
     router.push('/player');
   }, [setCurrentSession, router]);
-
-  const sessions = getThreeAmSessions(selectedCategory);
 
   return (
     <LinearGradient

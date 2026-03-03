@@ -1,6 +1,4 @@
-import { Article } from '@/types';
-
-export const ARTICLES: Article[] = [
+export const ARTICLES: any[] = [
   {
     id: 'article-1',
     category: 'Understanding Your Body',
