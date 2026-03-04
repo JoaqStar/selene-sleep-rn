@@ -93,27 +93,49 @@ export default function SignInScreen() {
     setError('');
 
     try {
-      let tokenHash = input;
-      if (input.includes('token=')) {
-        const url = new URL(input);
-        tokenHash = url.searchParams.get('token') ?? input;
-      }
+      const trimmedEmail = email.trim().toLowerCase();
 
-      console.log('[SignIn] Verifying token_hash...');
-      const { data, error: verifyError } = await supabase.auth.verifyOtp({
-        token_hash: tokenHash,
-        type: 'magiclink',
-      });
+      if (/^\d{6}$/.test(input)) {
+        console.log('[SignIn] Verifying 6-digit OTP code...');
+        const { data, error: verifyError } = await supabase.auth.verifyOtp({
+          email: trimmedEmail,
+          token: input,
+          type: 'email',
+        });
 
-      if (verifyError) {
-        console.error('[SignIn] Verify error:', verifyError);
-        setError(verifyError.message);
-      } else if (data.session) {
-        console.log('[SignIn] Verified! Session established.');
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.replace('/(tabs)');
+        if (verifyError) {
+          console.error('[SignIn] OTP verify error:', verifyError);
+          setError(verifyError.message);
+        } else if (data.session) {
+          console.log('[SignIn] OTP verified! Session established.');
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          router.replace('/(tabs)');
+        } else {
+          setError('Verification succeeded but no session was returned.');
+        }
       } else {
-        setError('Verification succeeded but no session was returned.');
+        let tokenHash = input;
+        if (input.includes('token=')) {
+          const url = new URL(input);
+          tokenHash = url.searchParams.get('token') ?? input;
+        }
+
+        console.log('[SignIn] Verifying token_hash...');
+        const { data, error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: 'magiclink',
+        });
+
+        if (verifyError) {
+          console.error('[SignIn] Verify error:', verifyError);
+          setError(verifyError.message);
+        } else if (data.session) {
+          console.log('[SignIn] Verified! Session established.');
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          router.replace('/(tabs)');
+        } else {
+          setError('Verification succeeded but no session was returned.');
+        }
       }
     } catch (e: any) {
       console.error('[SignIn] Verify error:', e);
@@ -182,24 +204,26 @@ export default function SignInScreen() {
               </View>
               <Text style={styles.title}>Check your inbox</Text>
               <Text style={styles.subtitle}>
-                We sent a magic link to{'\n'}
+                We sent a sign-in email to{'\n'}
                 <Text style={styles.emailHighlight}>{email.trim().toLowerCase()}</Text>
-                {'\n\n'}Tap the link in the email to sign in. This page will update automatically.
+                {'\n\n'}Tap the Log In link in the email, or enter the 6-digit code below.
               </Text>
 
               <View style={styles.pasteContainer}>
                 <Text style={styles.pasteLabel}>
-                  Copy the magic link from your email and paste it below:
+                  Enter the 6-digit code from your email:
                 </Text>
                 <View style={styles.inputWrapper}>
                   <TextInput
-                    style={styles.input}
-                    placeholder="Paste magic link here"
+                    style={[styles.input, styles.codeInput]}
+                    placeholder="000000"
                     placeholderTextColor={Colors.textMuted}
                     value={verifyToken}
-                    onChangeText={setVerifyToken}
+                    onChangeText={(text) => setVerifyToken(text.replace(/[^0-9]/g, '').slice(0, 6))}
                     autoCapitalize="none"
                     autoCorrect={false}
+                    keyboardType="number-pad"
+                    maxLength={6}
                     editable={!isVerifying}
                     testID="sign-in-token-input"
                   />
@@ -375,6 +399,12 @@ const styles = StyleSheet.create({
   verifyButtonText: {
     color: Colors.background,
     fontSize: 16,
+    fontWeight: '600' as const,
+  },
+  codeInput: {
+    textAlign: 'center' as const,
+    fontSize: 24,
+    letterSpacing: 12,
     fontWeight: '600' as const,
   },
   tryAgainText: {
