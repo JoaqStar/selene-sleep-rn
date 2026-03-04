@@ -1,136 +1,92 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Animated,
-  TextInput, KeyboardAvoidingView, Platform, Alert,
+  View, Text, StyleSheet, ScrollView, Pressable, Animated, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Users, Send } from 'lucide-react-native';
+import { Users, ChevronRight, MessageCircle } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
+import { useStreamChat } from '@/lib/hooks/useStreamChat';
 import { useCommunityStore } from '@/stores/communityStore';
-import { useOnboardingStore } from '@/stores/onboardingStore';
-import { BOARDS } from '@/mocks/community';
-import { CommunityPost } from '@/types';
-import CommunityPostCard from '@/components/CommunityPostCard';
+import { COMMUNITY_CHANNELS } from '@/lib/stream/channels';
 
 export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
-  const [activeBoard, setActiveBoard] = useState<string>(BOARDS[0]);
-  const [newPostText, setNewPostText] = useState('');
-  const [showCompose, setShowCompose] = useState(false);
-  const { posts, addPost } = useCommunityStore();
-  const { userName } = useOnboardingStore();
+  const router = useRouter();
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const { client, isConnected } = useStreamChat();
+  const { setClient, setConnected } = useCommunityStore();
+
+  useEffect(() => {
+    setClient(client);
+    setConnected(isConnected);
+  }, [client, isConnected]);
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
   }, []);
 
-  const filteredPosts = posts.filter((p) => p.board === activeBoard);
+  const handleChannelPress = (channelId: string) => {
+    router.push(`/community/${channelId}`);
+  };
 
-  const handlePostPress = useCallback((_post: CommunityPost) => {
-    console.log('Post pressed:', _post.id);
-  }, []);
-
-  const handleSubmitPost = useCallback(() => {
-    const trimmed = newPostText.trim();
-    if (!trimmed) {
-      Alert.alert('Empty post', 'Please write something before posting.');
-      return;
-    }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    addPost(activeBoard, userName || 'Anonymous', trimmed);
-    setNewPostText('');
-    setShowCompose(false);
-  }, [newPostText, activeBoard, userName, addPost]);
+  if (!isConnected) {
+    return (
+      <LinearGradient
+        colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
+        style={styles.container}
+      >
+        <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
+          <ActivityIndicator size="large" color={Colors.accent} />
+          <Text style={styles.loadingText}>Connecting to community...</Text>
+        </View>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient
       colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
       style={styles.container}
     >
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 100 }]}
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 120 }]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
-            <View style={styles.iconContainer}>
-              <Users size={24} color={Colors.accent} />
-            </View>
-            <Text style={styles.title}>Community</Text>
-            <Text style={styles.subtitle}>You're not alone in this. Share, ask, connect.</Text>
-          </Animated.View>
+        <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
+          <View style={styles.iconContainer}>
+            <Users size={24} color={Colors.accent} />
+          </View>
+          <Text style={styles.title}>Community</Text>
+          <Text style={styles.subtitle}>You&apos;re not alone in this. Share, ask, connect.</Text>
+        </Animated.View>
 
-          <Animated.View style={{ opacity: fadeAnim }}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.boardScroll}
-              contentContainerStyle={styles.boardContainer}
-            >
-              {BOARDS.map((board) => {
-                const isActive = board === activeBoard;
-                return (
-                  <Pressable
-                    key={board}
-                    onPress={() => setActiveBoard(board)}
-                    testID={`board-${board}`}
-                  >
-                    <View style={[styles.boardPill, isActive && styles.boardPillActive]}>
-                      <Text style={[styles.boardPillText, isActive && styles.boardPillTextActive]}>
-                        {board}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </Animated.View>
-
-          <Animated.View style={{ opacity: fadeAnim }}>
+        <Animated.View style={{ opacity: fadeAnim }}>
+          {COMMUNITY_CHANNELS.map((channel, index) => (
             <Pressable
-              onPress={() => setShowCompose(!showCompose)}
-              style={styles.composeToggle}
-              testID="compose-toggle"
+              key={channel.id}
+              onPress={() => handleChannelPress(channel.id)}
+              style={({ pressed }) => [
+                styles.channelCard,
+                pressed && styles.channelCardPressed,
+              ]}
+              testID={`channel-${channel.id}`}
             >
-              <Text style={styles.composeToggleText}>
-                {showCompose ? 'Cancel' : 'Share something...'}
-              </Text>
-            </Pressable>
-
-            {showCompose ? (
-              <View style={styles.composeBox}>
-                <TextInput
-                  style={styles.composeInput}
-                  placeholder="What's on your mind?"
-                  placeholderTextColor={Colors.textMuted}
-                  value={newPostText}
-                  onChangeText={setNewPostText}
-                  multiline
-                  maxLength={500}
-                  autoFocus
-                  testID="compose-input"
-                />
-                <Pressable onPress={handleSubmitPost} style={styles.sendButton} testID="submit-post">
-                  <Send size={18} color={Colors.accent} />
-                </Pressable>
+              <View style={styles.channelIconWrap}>
+                <MessageCircle size={20} color={Colors.accent} />
               </View>
-            ) : null}
-          </Animated.View>
-
-          <Animated.View style={{ opacity: fadeAnim }}>
-            {filteredPosts.map((post) => (
-              <CommunityPostCard key={post.id} post={post} onPress={handlePostPress} />
-            ))}
-          </Animated.View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+              <View style={styles.channelInfo}>
+                <Text style={styles.channelName}>{channel.name}</Text>
+                <Text style={styles.channelDescription} numberOfLines={1}>
+                  {channel.description}
+                </Text>
+              </View>
+              <ChevronRight size={18} color={Colors.textMuted} />
+            </Pressable>
+          ))}
+        </Animated.View>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -139,15 +95,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  flex: {
+  loadingContainer: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 15,
+    color: Colors.textSecondary,
   },
   content: {
     paddingHorizontal: 20,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 28,
   },
   iconContainer: {
     width: 56,
@@ -171,70 +134,41 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  boardScroll: {
-    marginBottom: 18,
-  },
-  boardContainer: {
-    gap: 8,
-    paddingVertical: 4,
-  },
-  boardPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  boardPillActive: {
-    backgroundColor: Colors.accentDim,
-    borderColor: 'rgba(201, 169, 110, 0.3)',
-  },
-  boardPillText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
-  boardPillTextActive: {
-    color: Colors.accent,
-  },
-  composeToggle: {
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  composeToggleText: {
-    fontSize: 14,
-    color: Colors.textMuted,
-  },
-  composeBox: {
+  channelCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: Colors.cardBackground,
     borderRadius: 14,
-    padding: 14,
-    marginBottom: 16,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.borderLight,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    borderColor: Colors.border,
   },
-  composeInput: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.text,
-    minHeight: 60,
-    maxHeight: 120,
-    textAlignVertical: 'top' as const,
-    marginRight: 10,
+  channelCardPressed: {
+    backgroundColor: Colors.cardBackgroundLight,
   },
-  sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  channelIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: Colors.accentDim,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 14,
+  },
+  channelInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  channelName: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.text,
+    marginBottom: 3,
+  },
+  channelDescription: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    lineHeight: 18,
   },
 });

@@ -4,7 +4,6 @@ import { Heart, MessageCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { CommunityPost } from '@/types';
-import { useCommunityStore } from '@/stores/communityStore';
 
 interface CommunityPostCardProps {
   post: CommunityPost;
@@ -14,8 +13,7 @@ interface CommunityPostCardProps {
 export default React.memo(function CommunityPostCard({ post, onPress }: CommunityPostCardProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const heartAnim = useRef(new Animated.Value(1)).current;
-  const { toggleLike, likedPosts } = useCommunityStore();
-  const isLiked = likedPosts.has(post.id);
+  const isLiked = false;
 
   const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, { toValue: 0.98, useNativeDriver: true }).start();
@@ -31,8 +29,8 @@ export default React.memo(function CommunityPostCard({ post, onPress }: Communit
       Animated.spring(heartAnim, { toValue: 1.3, useNativeDriver: true }),
       Animated.spring(heartAnim, { toValue: 1, useNativeDriver: true }),
     ]).start();
-    toggleLike(post.id);
-  }, [heartAnim, toggleLike, post.id]);
+    console.log('[CommunityPostCard] Like pressed:', post.id);
+  }, [heartAnim, post.id]);
 
   const handlePress = useCallback(() => {
     onPress(post);
