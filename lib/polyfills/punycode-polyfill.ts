@@ -181,7 +181,7 @@ function toUnicode(input: string): string {
     .join('.');
 }
 
-export const punycode = {
+const punycodeModule = {
   version: '2.1.0',
   ucs2: {
     decode: ucs2decode,
@@ -193,6 +193,13 @@ export const punycode = {
   toUnicode,
 };
 
-if (typeof globalThis !== 'undefined' && !(globalThis as any).punycode) {
-  (globalThis as any).punycode = punycode;
+if (typeof globalThis !== 'undefined') {
+  (globalThis as any).punycode = punycodeModule;
 }
+
+if (typeof global !== 'undefined') {
+  (global as any).punycode = punycodeModule;
+}
+
+export default punycodeModule;
+(module as any).exports = punycodeModule;
