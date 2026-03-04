@@ -95,8 +95,8 @@ export default function SignInScreen() {
     try {
       const trimmedEmail = email.trim().toLowerCase();
 
-      if (/^\d{6}$/.test(input)) {
-        console.log('[SignIn] Verifying 6-digit OTP code...');
+      if (/^\d{6,8}$/.test(input)) {
+        console.log('[SignIn] Verifying OTP code...');
         const { data, error: verifyError } = await supabase.auth.verifyOtp({
           email: trimmedEmail,
           token: input,
@@ -206,24 +206,24 @@ export default function SignInScreen() {
               <Text style={styles.subtitle}>
                 We sent a sign-in email to{'\n'}
                 <Text style={styles.emailHighlight}>{email.trim().toLowerCase()}</Text>
-                {'\n\n'}Tap the Log In link in the email, or enter the 6-digit code below.
+                {'\n\n'}Tap the Log In link in the email, or enter the code below.
               </Text>
 
               <View style={styles.pasteContainer}>
                 <Text style={styles.pasteLabel}>
-                  Enter the 6-digit code from your email:
+                  Enter the code from your email:
                 </Text>
                 <View style={styles.inputWrapper}>
                   <TextInput
                     style={[styles.input, styles.codeInput]}
-                    placeholder="000000"
+                    placeholder="00000000"
                     placeholderTextColor={Colors.textMuted}
                     value={verifyToken}
-                    onChangeText={(text) => setVerifyToken(text.replace(/[^0-9]/g, '').slice(0, 6))}
+                    onChangeText={(text) => setVerifyToken(text.replace(/[^0-9]/g, '').slice(0, 8))}
                     autoCapitalize="none"
                     autoCorrect={false}
                     keyboardType="number-pad"
-                    maxLength={6}
+                    maxLength={8}
                     editable={!isVerifying}
                     testID="sign-in-token-input"
                   />
