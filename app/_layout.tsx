@@ -1,4 +1,4 @@
-import '@/lib/polyfills/punycode';
+import '@/lib/polyfills/punycode-polyfill';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, Redirect } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
