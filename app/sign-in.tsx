@@ -13,6 +13,8 @@ export default function SignInScreen() {
   const [isSending, setIsSending] = useState(false);
   const [isSent, setIsSent] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
+  const [verifyToken, setVerifyToken] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -71,23 +73,55 @@ export default function SignInScreen() {
 
   useEffect(() => {
     if (!isPolling) return;
-    console.log('[SignIn] Starting session polling...');
-    const interval = setInterval(async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        console.log('[SignIn] Poll — session:', session ? 'found' : 'none');
-        if (session) {
-          clearInterval(interval);
-          setIsPolling(false);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          router.replace('/(tabs)');
-        }
-      } catch (e) {
-        console.error('[SignIn] Poll error:', e);
+    console.log('[SignIn] Listening for auth state changes...');
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[SignIn] Auth event:', event, 'session:', session ? 'found' : 'none');
+      if (session) {
+        setIsPolling(false);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        router.replace('/(tabs)');
       }
-    }, 3000);
-    return () => clearInterval(interval);
+    });
+    return () => subscription.unsubscribe();
   }, [isPolling, router]);
+
+  const handleVerifyToken = useCallback(async () => {
+    const input = verifyToken.trim();
+    if (!input) return;
+
+    setIsVerifying(true);
+    setError('');
+
+    try {
+      let tokenHash = input;
+      if (input.includes('token=')) {
+        const url = new URL(input);
+        tokenHash = url.searchParams.get('token') ?? input;
+      }
+
+      console.log('[SignIn] Verifying token_hash...');
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: 'magiclink',
+      });
+
+      if (verifyError) {
+        console.error('[SignIn] Verify error:', verifyError);
+        setError(verifyError.message);
+      } else if (data.session) {
+        console.log('[SignIn] Verified! Session established.');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        router.replace('/(tabs)');
+      } else {
+        setError('Verification succeeded but no session was returned.');
+      }
+    } catch (e: any) {
+      console.error('[SignIn] Verify error:', e);
+      setError(e.message ?? 'Failed to verify. Check the link and try again.');
+    } finally {
+      setIsVerifying(false);
+    }
+  }, [verifyToken, router]);
 
   const moonTranslateY = moonAnim.interpolate({
     inputRange: [0, 1],
@@ -153,12 +187,36 @@ export default function SignInScreen() {
                 {'\n\n'}Tap the link in the email to sign in. This page will update automatically.
               </Text>
 
-              {isPolling && (
-                <View style={styles.pollingContainer}>
-                  <ActivityIndicator size="small" color={Colors.accent} />
-                  <Text style={styles.pollingText}>Waiting for sign-in...</Text>
+              <View style={styles.pasteContainer}>
+                <Text style={styles.pasteLabel}>
+                  Copy the magic link from your email and paste it below:
+                </Text>
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Paste magic link here"
+                    placeholderTextColor={Colors.textMuted}
+                    value={verifyToken}
+                    onChangeText={setVerifyToken}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!isVerifying}
+                    testID="sign-in-token-input"
+                  />
                 </View>
-              )}
+                <Pressable
+                  onPress={handleVerifyToken}
+                  disabled={isVerifying || !verifyToken.trim()}
+                  style={[styles.verifyButton, (!verifyToken.trim() || isVerifying) && { opacity: 0.5 }]}
+                  testID="sign-in-verify-button"
+                >
+                  {isVerifying ? (
+                    <ActivityIndicator size="small" color={Colors.background} />
+                  ) : (
+                    <Text style={styles.verifyButtonText}>Verify</Text>
+                  )}
+                </Pressable>
+              </View>
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -294,6 +352,30 @@ const styles = StyleSheet.create({
   pollingText: {
     color: Colors.textSecondary,
     fontSize: 14,
+  },
+  pasteContainer: {
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  pasteLabel: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  verifyButton: {
+    backgroundColor: Colors.accent,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginTop: 12,
+  },
+  verifyButtonText: {
+    color: Colors.background,
+    fontSize: 16,
+    fontWeight: '600' as const,
   },
   tryAgainText: {
     color: Colors.accent,
