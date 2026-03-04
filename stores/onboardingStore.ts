@@ -8,6 +8,7 @@ interface OnboardingState {
   setUserName: (name: string) => void;
   completeOnboarding: (name: string) => Promise<void>;
   loadOnboardingState: () => Promise<void>;
+  resetOnboarding: () => Promise<void>;
 }
 
 export const useOnboardingStore = create<OnboardingState>((set) => ({
@@ -25,6 +26,17 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
       console.log('Onboarding completed for:', name);
     } catch (error) {
       console.error('Failed to save onboarding state:', error);
+    }
+  },
+
+  resetOnboarding: async () => {
+    try {
+      await AsyncStorage.removeItem('selene_user_name');
+      await AsyncStorage.removeItem('selene_onboarded');
+      set({ userName: '', isOnboarded: false });
+      console.log('[Onboarding] State reset');
+    } catch (error) {
+      console.error('[Onboarding] Failed to reset:', error);
     }
   },
 

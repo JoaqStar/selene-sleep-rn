@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import * as Linking from 'expo-linking';
+import { useOnboardingStore } from '@/stores/onboardingStore';
 
 interface AuthState {
   session: Session | null;
@@ -70,6 +71,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signOut: async () => {
     try {
+      await useOnboardingStore.getState().resetOnboarding();
       await supabase.auth.signOut();
       console.log('[Auth] Signed out');
     } catch (error) {

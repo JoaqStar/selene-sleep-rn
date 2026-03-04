@@ -79,7 +79,6 @@ export default function SignInScreen() {
       if (session) {
         setIsPolling(false);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.replace('/(tabs)');
       }
     });
     return () => subscription.unsubscribe();
@@ -109,7 +108,6 @@ export default function SignInScreen() {
         } else if (data.session) {
           console.log('[SignIn] OTP verified! Session established.');
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          router.replace('/(tabs)');
         } else {
           setError('Verification succeeded but no session was returned.');
         }
@@ -132,7 +130,6 @@ export default function SignInScreen() {
         } else if (data.session) {
           console.log('[SignIn] Verified! Session established.');
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          router.replace('/(tabs)');
         } else {
           setError('Verification succeeded but no session was returned.');
         }
