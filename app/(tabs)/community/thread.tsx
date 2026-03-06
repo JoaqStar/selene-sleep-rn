@@ -10,15 +10,15 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useLocalSearchParams, Redirect, Stack, useRouter } from 'expo-router';
-import { Send, ThumbsUp, MessageCircle } from 'lucide-react-native';
+import { useLocalSearchParams, Redirect, Stack } from 'expo-router';
+import { Send, ThumbsUp } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useCommunityStore } from '@/stores/communityStore';
 import { useAuthStore } from '@/stores/authStore';
 import { COMMUNITY_CHANNELS } from '@/lib/stream/channels';
 
-interface StreamMessage {
+interface ThreadMessage {
   id: string;
   text: string;
   user?: {
@@ -28,16 +28,15 @@ interface StreamMessage {
   created_at: string;
   reaction_counts?: Record<string, number>;
   own_reactions?: Array<{ type: string }>;
-  reply_count?: number;
 }
 
-export default function ChannelScreen() {
-  const { channelId } = useLocalSearchParams<{ channelId: string }>();
-  const router = useRouter();
+export default function ThreadScreen() {
+  const { messageId, channelId } = useLocalSearchParams<{ messageId: string; channelId: string }>();
   const { client } = useCommunityStore();
   const { session } = useAuthStore();
   const insets = useSafeAreaInsets();
-  const [messages, setMessages] = useState<StreamMessage[]>([]);
+  const [parentMessage, setParentMessage] = useState<ThreadMessage | null>(null);
+  const [replies, setReplies] = useState<ThreadMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
@@ -49,14 +48,13 @@ export default function ChannelScreen() {
   const channelName = channelConfig?.name ?? channelId ?? 'Channel';
 
   useEffect(() => {
-    if (!client || !channelId) return;
+    if (!client || !channelId || !messageId) return;
 
     let isSubscribed = true;
 
-    const setupChannel = async () => {
+    const setupThread = async () => {
       setIsLoading(true);
       setError(null);
-      console.log('[ChannelScreen] Setting up channel:', channelId);
 
       try {
         const ch = client.channel('messaging', channelId, {
@@ -66,45 +64,62 @@ export default function ChannelScreen() {
 
         await ch.watch();
         channelRef.current = ch;
-        console.log('[ChannelScreen] Channel ready:', channelId);
 
-        const mapMessage = (m: any) => ({
+        const parent = (ch.state.messages ?? []).find((m: any) => m.id === messageId);
+        if (!parent && isSubscribed) {
+          setError('Post not found');
+          setIsLoading(false);
+          return;
+        }
+
+        const mapMessage = (m: any): ThreadMessage => ({
           id: m.id,
           text: m.text ?? '',
           user: m.user ? { id: m.user.id, name: m.user.name } : undefined,
           created_at: m.created_at,
           reaction_counts: m.reaction_counts,
           own_reactions: m.own_reactions,
-          reply_count: m.reply_count ?? 0,
         });
 
-        const existingMessages = (ch.state.messages ?? [])
-          .filter((m: any) => !m.parent_id)
-          .map(mapMessage);
+        if (parent && isSubscribed) {
+          setParentMessage(mapMessage(parent));
+        }
 
+        const result = await ch.getReplies(messageId, { limit: 50 });
+        const rawReplies = Array.isArray(result) ? result : (result?.messages ?? []);
+        const replyList = rawReplies.map((m: any) => mapMessage(m));
         if (isSubscribed) {
-          setMessages(existingMessages);
+          setReplies(replyList);
         }
 
         ch.on('message.new', (event: any) => {
           if (!isSubscribed) return;
           const msg = event.message;
-          if (!msg || msg.parent_id) return;
-          setMessages((prev) => [...prev, mapMessage(msg)]);
+          if (!msg || msg.parent_id !== messageId) return;
+          setReplies((prev) => [...prev, mapMessage(msg)]);
         });
 
         ch.on('message.updated', (event: any) => {
           if (!isSubscribed) return;
           const msg = event.message;
-          if (!msg || msg.parent_id) return;
-          setMessages((prev) =>
-            prev.map((m) => (m.id === msg.id ? mapMessage(msg) : m)),
-          );
+          if (!msg) return;
+
+          // Update parent message if it changed
+          if (msg.id === messageId) {
+            setParentMessage((prev) => (prev ? mapMessage(msg) : prev));
+          }
+
+          // Update replies in this thread
+          if (msg.parent_id === messageId) {
+            setReplies((prev) =>
+              prev.map((m) => (m.id === msg.id ? mapMessage(msg) : m)),
+            );
+          }
         });
       } catch (err) {
-        console.error('[ChannelScreen] Channel setup error:', err);
+        console.error('[ThreadScreen] Setup error:', err);
         if (isSubscribed) {
-          setError('Failed to load channel. Please try again.');
+          setError('Failed to load thread. Please try again.');
         }
       } finally {
         if (isSubscribed) {
@@ -113,96 +128,88 @@ export default function ChannelScreen() {
       }
     };
 
-    setupChannel();
+    setupThread();
 
     return () => {
       isSubscribed = false;
-      if (channelRef.current) {
-        channelRef.current.stopWatching().catch((err: any) => {
-          console.error('[ChannelScreen] Stop watching error:', err);
-        });
-      }
     };
-  }, [client, channelId, channelName, channelConfig?.description]);
+  }, [client, channelId, messageId, channelName, channelConfig?.description]);
 
-  const handleSend = useCallback(async () => {
+  const handleSendReply = useCallback(async () => {
     const text = inputText.trim();
-    if (!text || !channelRef.current || isSending) return;
+    if (!text || !channelRef.current || isSending || !messageId) return;
 
     setIsSending(true);
     setInputText('');
 
     try {
-      await channelRef.current.sendMessage({ text });
+      await channelRef.current.sendMessage({
+        text,
+        parent_id: messageId,
+      });
+      flatListRef.current?.scrollToEnd({ animated: true });
     } catch (err) {
-      console.error('[ChannelScreen] Send error:', err);
+      console.error('[ThreadScreen] Send reply error:', err);
       setInputText(text);
     } finally {
       setIsSending(false);
     }
-  }, [inputText, isSending]);
+  }, [inputText, isSending, messageId]);
+
+  const currentUserId = session?.user?.id;
 
   const handleLikeToggle = useCallback(
-    async (messageId: string, hasLiked: boolean) => {
+    async (messageIdToToggle: string, hasLiked: boolean, isParent: boolean) => {
       const ch = channelRef.current;
       const uid = session?.user?.id;
       if (!ch || !uid) return;
 
-      // Optimistic update so the UI responds immediately
-      setMessages((prev) =>
-        prev.map((m) => {
-          if (m.id !== messageId) return m;
+      const updateOne = (m: ThreadMessage): ThreadMessage => {
+        const currentLikeCount = m.reaction_counts?.like ?? 0;
+        const own = m.own_reactions ?? [];
 
-          const currentLikeCount = m.reaction_counts?.like ?? 0;
-          const own = m.own_reactions ?? [];
-
-          if (hasLiked) {
-            const nextCount = Math.max(currentLikeCount - 1, 0);
-            return {
-              ...m,
-              reaction_counts: { ...(m.reaction_counts ?? {}), like: nextCount },
-              own_reactions: own.filter((r) => r.type !== 'like'),
-            };
-          }
-
-          const nextCount = currentLikeCount + 1;
+        if (hasLiked) {
+          const nextCount = Math.max(currentLikeCount - 1, 0);
           return {
             ...m,
             reaction_counts: { ...(m.reaction_counts ?? {}), like: nextCount },
-            own_reactions: [...own, { type: 'like' }],
+            own_reactions: own.filter((r) => r.type !== 'like'),
           };
-        }),
+        }
+
+        const nextCount = currentLikeCount + 1;
+        return {
+          ...m,
+          reaction_counts: { ...(m.reaction_counts ?? {}), like: nextCount },
+          own_reactions: [...own, { type: 'like' }],
+        };
+      };
+
+      // Optimistic update for parent and/or replies
+      if (isParent) {
+        setParentMessage((prev) => (prev && prev.id === messageIdToToggle ? updateOne(prev) : prev));
+      }
+
+      setReplies((prev) =>
+        prev.map((m) => (m.id === messageIdToToggle ? updateOne(m) : m)),
       );
 
       try {
         if (hasLiked) {
-          await ch.deleteReaction(messageId, 'like', uid);
+          await ch.deleteReaction(messageIdToToggle, 'like', uid);
         } else {
-          await ch.sendReaction(messageId, { type: 'like' });
+          await ch.sendReaction(messageIdToToggle, { type: 'like' });
         }
       } catch (err) {
-        console.error('[ChannelScreen] Reaction error:', err);
-        // Optional: could revert optimistic change here on error
+        console.error('[ThreadScreen] Reaction error:', err);
+        // Optional: could revert optimistic change on error
       }
     },
     [session?.user?.id],
   );
 
-  const handleOpenThread = useCallback(
-    (messageId: string) => {
-      if (!channelId) return;
-      router.push({
-        pathname: '/community/thread',
-        params: { messageId, channelId },
-      });
-    },
-    [channelId, router],
-  );
-
-  const currentUserId = session?.user?.id;
-
   const renderMessage = useCallback(
-    ({ item }: { item: StreamMessage }) => {
+    ({ item }: { item: ThreadMessage }) => {
       const isOwn = item.user?.id === currentUserId;
       const displayName = item.user?.name ?? 'Anonymous';
       const time = new Date(item.created_at).toLocaleTimeString([], {
@@ -211,7 +218,7 @@ export default function ChannelScreen() {
       });
       const likeCount = item.reaction_counts?.like ?? 0;
       const hasLiked = item.own_reactions?.some((r) => r.type === 'like') ?? false;
-      const replyCount = item.reply_count ?? 0;
+      const isParent = parentMessage && item.id === parentMessage.id;
 
       return (
         <View style={[styles.messageBubbleWrap, isOwn && styles.messageBubbleWrapOwn]}>
@@ -222,7 +229,7 @@ export default function ChannelScreen() {
           <Text style={[styles.messageTime, isOwn && styles.messageTimeOwn]}>{time}</Text>
           <View style={styles.messageActions}>
             <Pressable
-              onPress={() => handleLikeToggle(item.id, hasLiked)}
+              onPress={() => handleLikeToggle(item.id, hasLiked, !!isParent)}
               style={styles.messageActionButton}
               hitSlop={8}
             >
@@ -235,21 +242,11 @@ export default function ChannelScreen() {
                 {likeCount > 0 ? likeCount : 'Like'}
               </Text>
             </Pressable>
-            <Pressable
-              onPress={() => handleOpenThread(item.id)}
-              style={styles.messageActionButton}
-              hitSlop={8}
-            >
-              <MessageCircle size={14} color={Colors.textMuted} />
-              <Text style={styles.messageActionText}>
-                {replyCount > 0 ? replyCount : 'Comment'}
-              </Text>
-            </Pressable>
           </View>
         </View>
       );
     },
-    [currentUserId, handleLikeToggle, handleOpenThread],
+    [currentUserId, parentMessage, handleLikeToggle],
   );
 
   if (!session) {
@@ -259,9 +256,9 @@ export default function ChannelScreen() {
   if (!client || isLoading) {
     return (
       <View style={styles.centered}>
-        <Stack.Screen options={{ title: channelName }} />
+        <Stack.Screen options={{ title: 'Thread' }} />
         <ActivityIndicator size="large" color={Colors.accent} />
-        <Text style={styles.loadingText}>Loading channel...</Text>
+        <Text style={styles.loadingText}>Loading thread...</Text>
       </View>
     );
   }
@@ -269,11 +266,13 @@ export default function ChannelScreen() {
   if (error) {
     return (
       <View style={styles.centered}>
-        <Stack.Screen options={{ title: channelName }} />
+        <Stack.Screen options={{ title: 'Thread' }} />
         <Text style={styles.errorText}>{error}</Text>
       </View>
     );
   }
+
+  const listData = parentMessage ? [parentMessage, ...replies] : [];
 
   return (
     <KeyboardAvoidingView
@@ -281,48 +280,44 @@ export default function ChannelScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <Stack.Screen options={{ title: channelName }} />
+      <Stack.Screen options={{ title: 'Thread' }} />
 
-      {messages.length === 0 ? (
+      {listData.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>No messages yet</Text>
-          <Text style={styles.emptySubtitle}>Be the first to start the conversation</Text>
+          <Text style={styles.emptyTitle}>No replies yet</Text>
+          <Text style={styles.emptySubtitle}>Be the first to reply</Text>
         </View>
       ) : (
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={listData}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           contentContainerStyle={styles.messageList}
           showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-          onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
         />
       )}
 
       <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 8) }]}>
         <TextInput
           style={styles.textInput}
-          placeholder="Type a message..."
+          placeholder="Add a reply..."
           placeholderTextColor={Colors.textMuted}
           value={inputText}
           onChangeText={setInputText}
           multiline
           maxLength={2000}
-          onSubmitEditing={handleSend}
+          onSubmitEditing={handleSendReply}
           blurOnSubmit={false}
-          testID="message-input"
         />
         <Pressable
-          onPress={handleSend}
+          onPress={handleSendReply}
           disabled={!inputText.trim() || isSending}
           style={({ pressed }) => [
             styles.sendButton,
             (!inputText.trim() || isSending) && styles.sendButtonDisabled,
             pressed && styles.sendButtonPressed,
           ]}
-          testID="send-button"
         >
           {isSending ? (
             <ActivityIndicator size="small" color={Colors.background} />

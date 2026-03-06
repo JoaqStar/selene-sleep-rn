@@ -14,6 +14,7 @@ export default function CommunityLayout() {
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="[channelId]" options={{ headerBackTitle: 'Back' }} />
+      <Stack.Screen name="thread" options={{ title: 'Thread', headerBackTitle: 'Back' }} />
     </Stack>
   );
 }
