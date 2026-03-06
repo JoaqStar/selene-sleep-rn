@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function SignInScreen() {
   const [email, setEmail] = useState('');
@@ -18,6 +19,7 @@ export default function SignInScreen() {
   const [error, setError] = useState('');
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { session } = useAuthStore();
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -38,6 +40,13 @@ export default function SignInScreen() {
     ]).start();
   }, []);
 
+  useEffect(() => {
+    if (session) {
+      console.log('[SignIn] Session detected, navigating to root');
+      router.replace('/');
+    }
+  }, [session, router]);
+
   const handleSendLink = useCallback(async () => {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed || !trimmed.includes('@')) {
@@ -48,6 +57,11 @@ export default function SignInScreen() {
     setError('');
     setIsSending(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    if (!supabase) {
+      setError('Sign-in is not configured. Missing Supabase credentials.');
+      return;
+    }
 
     try {
       const redirectUrl = __DEV__ ? undefined : 'selenesleepapp://';
@@ -74,6 +88,7 @@ export default function SignInScreen() {
   useEffect(() => {
     if (!isPolling) return;
     console.log('[SignIn] Listening for auth state changes...');
+    if (!supabase) return;
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('[SignIn] Auth event:', event, 'session:', session ? 'found' : 'none');
       if (session) {
@@ -90,6 +105,11 @@ export default function SignInScreen() {
 
     setIsVerifying(true);
     setError('');
+
+    if (!supabase) {
+      setError('Sign-in is not configured. Missing Supabase credentials.');
+      return;
+    }
 
     try {
       const trimmedEmail = email.trim().toLowerCase();

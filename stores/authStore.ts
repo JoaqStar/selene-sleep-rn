@@ -16,6 +16,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
 
   initialize: () => {
+    if (!supabase) {
+      console.error('[Auth] Supabase client not configured');
+      set({ isLoading: false });
+      return () => {};
+    }
     const handleDeepLink = async (url: string) => {
       console.log('[Auth] Deep link received:', url);
       try {
@@ -52,6 +57,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       console.log('[Auth] Initial session:', session ? 'active' : 'none');
+      console.log('[Auth] Initial session token:', session?.access_token);
       set({ session, isLoading: false });
     }).catch((error) => {
       console.error('[Auth] Failed to get session:', error);
@@ -72,7 +78,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     try {
       await useOnboardingStore.getState().resetOnboarding();
-      await supabase.auth.signOut();
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
       console.log('[Auth] Signed out');
     } catch (error) {
       console.error('[Auth] Sign out error:', error);

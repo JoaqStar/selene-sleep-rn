@@ -17,7 +17,6 @@ export function useStreamChat() {
     if (!session?.user || !apiKey || connectingRef.current) return;
 
     const userId = session.user.id;
-    const accessToken = session.access_token;
     const userEmail = session.user.email ?? 'user';
 
     const connect = async () => {
@@ -26,7 +25,7 @@ export function useStreamChat() {
 
       try {
         const chatClient = StreamChat.getInstance(apiKey);
-        const streamToken = await getStreamToken(accessToken);
+        const streamToken = await getStreamToken(userId);
 
         await chatClient.connectUser(
           {
@@ -62,7 +61,7 @@ export function useStreamChat() {
         connectingRef.current = false;
       }
     };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, apiKey]);
 
   return { client, isConnected };
 }

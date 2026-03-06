@@ -3,6 +3,9 @@ import { Article } from '@/types';
 
 export async function getArticles(): Promise<Article[]> {
   console.log('[articleService] getArticles called');
+  if (!supabase) {
+    throw new Error('Supabase client not configured');
+  }
   const { data, error, status, statusText } = await supabase
     .from('articles')
     .select('*')
@@ -19,6 +22,9 @@ export async function getArticles(): Promise<Article[]> {
 }
 
 export async function getArticleById(id: number): Promise<Article> {
+  if (!supabase) {
+    throw new Error('Supabase client not configured');
+  }
   const { data, error } = await supabase
     .from('articles')
     .select('*')
