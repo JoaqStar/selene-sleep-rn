@@ -7,6 +7,67 @@ This is a native cross-platform mobile app created with [Rork](https://rork.com)
 **Platform**: Native iOS & Android app, exportable to web
 **Framework**: Expo Router + React Native
 
+## Rebuilding native iOS & Android projects
+
+If you ever delete or need to regenerate the `ios/` or `android/` folders (for example after changing `app.json` splash, icons, or bundle IDs), follow these steps.
+
+### Prerequisites (once per machine)
+
+- Node.js, Bun, Xcode (for iOS), Android Studio (for Android)
+- Shell config (recommended):
+
+```bash
+echo 'export LANG=en_US.UTF-8' >> ~/.zshrc
+echo 'export LC_ALL=en_US.UTF-8' >> ~/.zshrc
+source ~/.zshrc
+```
+
+### 1. Regenerate native projects from `app.json`
+
+From the project root:
+
+```bash
+# iOS and Android
+npx expo prebuild
+```
+
+This reads `app.json` (icons, splash, scheme `selenesleepapp`, bundle IDs, etc.) and regenerates the native projects. Avoid `--clean` unless you intentionally want to wipe **all** native changes.
+
+### 2. iOS: install pods and set signing
+
+```bash
+cd ios
+pod install
+open SeleneSleepApp.xcworkspace
+```
+
+In Xcode:
+
+1. Select the `SeleneSleepApp` target.
+2. Go to **Signing & Capabilities**.
+3. Check **Automatically manage signing**.
+4. Choose your **Team** (Apple ID / org).
+
+Each developer will do this once on their own machine.
+
+### 3. Android: rebuild the app
+
+You can use either CLI or Android Studio.
+
+**CLI:**
+
+```bash
+cd /Users/joaquinbrown/Developer/selene-sleep-rn
+npx expo run:android
+```
+
+**Android Studio:**
+
+1. Open the `android/` folder.
+2. From the menu: **Build → Clean Project**, then **Build → Rebuild Project**.
+
+If you change splash or icons and they don’t update, uninstall the app from the emulator/device and rebuild.
+
 ## How can I edit this code?
 
 There are several ways of editing your native mobile application.

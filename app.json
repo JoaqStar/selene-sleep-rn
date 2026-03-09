@@ -2,27 +2,29 @@
   "expo": {
     "name": "Selene Sleep App",
     "slug": "selene-sleep-app",
-    "version": "1.0.0",
+    "version": "0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "selenesleepapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "image": "./assets/images/selene_splash_1024.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#050017"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.yogawakeup.selene"
+      "bundleIdentifier": "com.yogawakeup.selene",
+      "buildNumber": "2"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.yogawakeup.selene"
+      "package": "com.yogawakeup.selene",
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
