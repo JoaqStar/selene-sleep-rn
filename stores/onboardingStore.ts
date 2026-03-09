@@ -46,12 +46,14 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
         AsyncStorage.getItem('selene_user_name'),
         AsyncStorage.getItem('selene_onboarded'),
       ]);
+      const userName = name ?? '';
+      const isOnboarded = onboarded === 'true' && userName.trim().length > 0;
       set({
-        userName: name ?? '',
-        isOnboarded: onboarded === 'true',
+        userName,
+        isOnboarded,
         isLoading: false,
       });
-      console.log('Onboarding state loaded:', { name, onboarded });
+      console.log('Onboarding state loaded:', { name: userName, onboarded });
     } catch (error) {
       console.error('Failed to load onboarding state:', error);
       set({ isLoading: false });

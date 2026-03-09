@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Moon, ArrowRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -10,7 +10,6 @@ import { useOnboardingStore } from '@/stores/onboardingStore';
 
 export default function OnboardingScreen() {
   const [name, setName] = useState('');
-  const [step, setStep] = useState(0);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { completeOnboarding } = useOnboardingStore();
@@ -32,27 +31,12 @@ export default function OnboardingScreen() {
     ]).start();
   }, []);
 
-  const animateToNextStep = useCallback(() => {
-    Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
-      setStep(1);
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-      ]).start();
-    });
-    slideAnim.setValue(20);
-  }, [fadeAnim, slideAnim]);
-
   const handleContinue = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (step === 0) {
-      animateToNextStep();
-    } else {
-      const trimmedName = name.trim() || 'Friend';
-      await completeOnboarding(trimmedName);
-      router.replace('/(tabs)/(home)');
-    }
-  }, [step, name, animateToNextStep, completeOnboarding, router]);
+    const trimmedName = name.trim() || 'Friend';
+    await completeOnboarding(trimmedName);
+    router.replace('/(tabs)/(home)');
+  }, [name, completeOnboarding, router]);
 
   const moonTranslateY = moonAnim.interpolate({
     inputRange: [0, 1],
@@ -65,26 +49,26 @@ export default function OnboardingScreen() {
       style={styles.container}
     >
       <KeyboardAvoidingView
-        style={[styles.inner, { paddingTop: insets.top + 60 }]}
+        style={styles.keyboardAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <Animated.View style={[styles.moonContainer, { transform: [{ translateY: moonTranslateY }] }]}>
-          <View style={styles.moonGlow}>
-            <Moon size={48} color={Colors.accent} />
-          </View>
-        </Animated.View>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View style={[styles.moonContainer, { transform: [{ translateY: moonTranslateY }] }]}>
+            <View style={styles.moonGlow}>
+              <Moon size={48} color={Colors.accent} />
+            </View>
+          </Animated.View>
 
-        <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          {step === 0 ? (
-            <>
-              <Text style={styles.brand}>Selene</Text>
-              <Text style={styles.tagline}>Sleep support{'\n'}for the nights that changed</Text>
-              <Text style={styles.subtitle}>
-                Guided meditations, breathing exercises, and body scans designed specifically for perimenopause sleep.
-              </Text>
-            </>
-          ) : (
-            <>
+          <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            <View style={styles.nameSection}>
               <Text style={styles.question}>What should we call you?</Text>
               <Text style={styles.questionSubtitle}>Just your first name is perfect.</Text>
               <TextInput
@@ -93,32 +77,32 @@ export default function OnboardingScreen() {
                 placeholderTextColor={Colors.textMuted}
                 value={name}
                 onChangeText={setName}
-                autoFocus
                 returnKeyType="done"
                 onSubmitEditing={handleContinue}
+                autoCapitalize="words"
                 testID="onboarding-name-input"
               />
-            </>
-          )}
-        </Animated.View>
+            </View>
+          </Animated.View>
 
-        <Animated.View style={[styles.footer, { paddingBottom: insets.bottom + 32, opacity: fadeAnim }]}>
-          <Pressable
-            onPress={handleContinue}
-            onPressIn={() => {
-              Animated.spring(buttonScale, { toValue: 0.95, useNativeDriver: true }).start();
-            }}
-            onPressOut={() => {
-              Animated.spring(buttonScale, { toValue: 1, useNativeDriver: true }).start();
-            }}
-            testID="onboarding-continue-button"
-          >
-            <Animated.View style={[styles.button, { transform: [{ scale: buttonScale }] }]}>
-              <Text style={styles.buttonText}>{step === 0 ? 'Begin' : 'Enter Selene'}</Text>
-              <ArrowRight size={18} color={Colors.background} />
-            </Animated.View>
-          </Pressable>
-        </Animated.View>
+          <Animated.View style={[styles.footer, { opacity: fadeAnim }]}>
+            <Pressable
+              onPress={handleContinue}
+              onPressIn={() => {
+                Animated.spring(buttonScale, { toValue: 0.95, useNativeDriver: true }).start();
+              }}
+              onPressOut={() => {
+                Animated.spring(buttonScale, { toValue: 1, useNativeDriver: true }).start();
+              }}
+              testID="onboarding-continue-button"
+            >
+              <Animated.View style={[styles.button, { transform: [{ scale: buttonScale }] }]}>
+                <Text style={styles.buttonText}>Enter Selene</Text>
+                <ArrowRight size={18} color={Colors.background} />
+              </Animated.View>
+            </Pressable>
+          </Animated.View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
   );
@@ -128,13 +112,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  inner: {
+  keyboardAvoid: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 32,
     justifyContent: 'space-between',
   },
   footer: {
     alignItems: 'center',
+    marginTop: 16,
   },
   moonContainer: {
     alignItems: 'center',
@@ -188,7 +179,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: 24,
+  },
+  nameSection: {
+    marginTop: 40,
   },
   input: {
     backgroundColor: Colors.surface,

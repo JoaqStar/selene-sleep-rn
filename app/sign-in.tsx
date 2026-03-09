@@ -330,10 +330,11 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 32,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
   },
   footer: {
     alignItems: 'center',
+    marginTop: 16,
   },
   moonContainer: {
     alignItems: 'center',

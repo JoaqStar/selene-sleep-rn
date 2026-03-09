@@ -31,7 +31,18 @@ export default function LearnScreen() {
     router.push(`/(tabs)/learn/${article.id}`);
   }, [router]);
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <LinearGradient
+        colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
+        style={styles.container}
+      >
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading articles...</Text>
+        </View>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient
@@ -89,6 +100,15 @@ export default function LearnScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    fontSize: 15,
+    color: Colors.textSecondary,
   },
   content: {
     paddingHorizontal: 20,
