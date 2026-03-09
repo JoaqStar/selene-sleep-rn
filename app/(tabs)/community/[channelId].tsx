@@ -10,13 +10,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useLocalSearchParams, Redirect, Stack, useRouter } from 'expo-router';
+import { useLocalSearchParams, Redirect, useRouter } from 'expo-router';
 import { Send, ThumbsUp, MessageCircle } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useCommunityStore } from '@/stores/communityStore';
 import { useAuthStore } from '@/stores/authStore';
 import { COMMUNITY_CHANNELS } from '@/lib/stream/channels';
+import { ScreenHeader } from '@/components/ScreenHeader';
 
 interface StreamMessage {
   id: string;
@@ -259,7 +260,6 @@ export default function ChannelScreen() {
   if (!client || isLoading) {
     return (
       <View style={styles.centered}>
-        <Stack.Screen options={{ title: channelName }} />
         <ActivityIndicator size="large" color={Colors.accent} />
         <Text style={styles.loadingText}>Loading channel...</Text>
       </View>
@@ -269,7 +269,6 @@ export default function ChannelScreen() {
   if (error) {
     return (
       <View style={styles.centered}>
-        <Stack.Screen options={{ title: channelName }} />
         <Text style={styles.errorText}>{error}</Text>
       </View>
     );
@@ -281,7 +280,7 @@ export default function ChannelScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <Stack.Screen options={{ title: channelName }} />
+      <ScreenHeader title={channelName} backLabel="Community" />
 
       {messages.length === 0 ? (
         <View style={styles.emptyContainer}>

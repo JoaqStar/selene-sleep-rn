@@ -10,13 +10,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useLocalSearchParams, Redirect, Stack } from 'expo-router';
+import { useLocalSearchParams, Redirect } from 'expo-router';
 import { Send, ThumbsUp } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useCommunityStore } from '@/stores/communityStore';
 import { useAuthStore } from '@/stores/authStore';
 import { COMMUNITY_CHANNELS } from '@/lib/stream/channels';
+import { ScreenHeader } from '@/components/ScreenHeader';
 
 interface ThreadMessage {
   id: string;
@@ -219,6 +220,7 @@ export default function ThreadScreen() {
       const likeCount = item.reaction_counts?.like ?? 0;
       const hasLiked = item.own_reactions?.some((r) => r.type === 'like') ?? false;
       const isParent = parentMessage && item.id === parentMessage.id;
+      const commentCount = isParent ? replies.length : 0;
 
       return (
         <View style={[styles.messageBubbleWrap, isOwn && styles.messageBubbleWrapOwn]}>
@@ -242,11 +244,16 @@ export default function ThreadScreen() {
                 {likeCount > 0 ? likeCount : 'Like'}
               </Text>
             </Pressable>
+            {isParent && commentCount > 0 && (
+              <Text style={styles.messageActionText}>
+                {commentCount} {commentCount === 1 ? 'comment' : 'comments'}
+              </Text>
+            )}
           </View>
         </View>
       );
     },
-    [currentUserId, parentMessage, handleLikeToggle],
+    [currentUserId, parentMessage, replies.length, handleLikeToggle],
   );
 
   if (!session) {
@@ -256,7 +263,6 @@ export default function ThreadScreen() {
   if (!client || isLoading) {
     return (
       <View style={styles.centered}>
-        <Stack.Screen options={{ title: 'Thread' }} />
         <ActivityIndicator size="large" color={Colors.accent} />
         <Text style={styles.loadingText}>Loading thread...</Text>
       </View>
@@ -266,7 +272,6 @@ export default function ThreadScreen() {
   if (error) {
     return (
       <View style={styles.centered}>
-        <Stack.Screen options={{ title: 'Thread' }} />
         <Text style={styles.errorText}>{error}</Text>
       </View>
     );
@@ -280,7 +285,7 @@ export default function ThreadScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <Stack.Screen options={{ title: 'Thread' }} />
+      <ScreenHeader title="Thread" backLabel="Community" />
 
       {listData.length === 0 ? (
         <View style={styles.emptyContainer}>

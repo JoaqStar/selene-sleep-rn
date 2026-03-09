@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
-import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Moon, Mail, ArrowRight, CheckCircle } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -64,9 +64,12 @@ export default function SignInScreen() {
     }
 
     try {
-      const redirectUrl = __DEV__ ? undefined : 'selenesleepapp://';
+      const redirectUrl = 'https://selene-sleep-app.s3.us-east-1.amazonaws.com/selene-confirmed.html';
       console.log('[SignIn] Redirect URL:', redirectUrl);
-      const { error: otpError } = await supabase.auth.signInWithOtp({ email: trimmed, options: { emailRedirectTo: redirectUrl } });
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email: trimmed,
+        options: { emailRedirectTo: redirectUrl },
+      });
       if (otpError) {
         console.error('[SignIn] OTP error:', otpError);
         setError(otpError.message);
@@ -173,9 +176,15 @@ export default function SignInScreen() {
       style={styles.container}
     >
       <KeyboardAvoidingView
-        style={[styles.inner, { paddingTop: insets.top + 60 }]}
+        style={styles.keyboardAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
         <Animated.View style={[styles.moonContainer, { transform: [{ translateY: moonTranslateY }] }]}>
           <View style={styles.moonGlow}>
             <Moon size={48} color={Colors.accent} />
@@ -277,7 +286,7 @@ export default function SignInScreen() {
         </Animated.View>
 
         {!isSent && (
-          <Animated.View style={[styles.footer, { paddingBottom: insets.bottom + 32, opacity: fadeAnim }]}>
+          <Animated.View style={[styles.footer, { opacity: fadeAnim }]}>
             <Pressable
               onPress={handleSendLink}
               disabled={isSending}
@@ -302,6 +311,7 @@ export default function SignInScreen() {
             </Pressable>
           </Animated.View>
         )}
+        </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
   );
@@ -311,8 +321,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  inner: {
+  keyboardAvoid: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 32,
     justifyContent: 'space-between',
   },
