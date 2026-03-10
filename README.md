@@ -68,6 +68,41 @@ npx expo run:android
 
 If you change splash or icons and they don’t update, uninstall the app from the emulator/device and rebuild.
 
+## Authentication: Supabase email, Google, and Apple
+
+This app uses Supabase for authentication, with three sign-in options:
+
+- Magic link via email
+- Google OAuth
+- Apple OAuth
+
+### Supabase configuration
+
+In your Supabase project:
+
+- Go to **Authentication → URL Configuration** and ensure:
+  - Your app deep link scheme is allowed (e.g. `selenesleepapp://`), and/or
+  - Your hosted confirmation page `https://selene-sleep-app.s3.us-east-1.amazonaws.com/selene-confirmed.html` is configured if you use it as a bridge.
+- Enable **Google** and **Apple** providers under **Authentication → Providers**:
+  - Google: create OAuth credentials in Google Cloud Console with redirect URI:
+    - `https://<your-project>.supabase.co/auth/v1/callback`
+    - Paste the Client ID and Client secret into Supabase and toggle Google **ON**.
+  - Apple: create a Services ID, Sign in with Apple key (`.p8`), and configure redirect URI:
+    - `https://<your-project>.supabase.co/auth/v1/callback`
+    - Fill Client ID (Services ID), Key ID, Team ID, and private key in Supabase and toggle Apple **ON**.
+
+### Environment variables
+
+The app expects the following env vars (Expo `EXPO_PUBLIC_*` style):
+
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `EXPO_PUBLIC_SUPABASE_OAUTH_REDIRECT_URL` (optional; e.g. `selenesleepapp://` or your confirmation page URL)
+
+Email magic links currently use the confirmation page on S3; Google/Apple OAuth use `EXPO_PUBLIC_SUPABASE_OAUTH_REDIRECT_URL` if set, otherwise they fall back to `selenesleepapp://`.
+
+Deep links are handled in `stores/authStore.ts` by parsing `access_token` and `refresh_token` from the callback URL and calling `supabase.auth.setSession`.
+
 ## How can I edit this code?
 
 There are several ways of editing your native mobile application.

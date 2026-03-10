@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView } from 'react-native';
+import * as Linking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Moon, Mail, ArrowRight, CheckCircle } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +18,8 @@ export default function SignInScreen() {
   const [verifyToken, setVerifyToken] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState('');
+  const [hasFocusedEmail, setHasFocusedEmail] = useState(false);
+  const scrollRef = useRef<ScrollView | null>(null);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuthStore();
@@ -46,6 +49,47 @@ export default function SignInScreen() {
       router.replace('/');
     }
   }, [session, router]);
+
+  const handleOAuthSignIn = useCallback(
+    async (provider: 'google' | 'apple') => {
+      if (!supabase) {
+        setError('Sign-in is not configured. Missing Supabase credentials.');
+        return;
+      }
+
+      try {
+        const redirectTo =
+          process.env.EXPO_PUBLIC_SUPABASE_OAUTH_REDIRECT_URL ??
+          'selenesleepapp://';
+
+        console.log('[OAuth] Starting sign-in with provider:', provider, 'redirectTo:', redirectTo);
+
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: {
+            redirectTo,
+          },
+        });
+
+        if (error) {
+          console.error('[OAuth] Error:', error);
+          setError(error.message);
+          return;
+        }
+
+        if (data?.url) {
+          console.log('[OAuth] Opening browser URL for provider:', provider);
+          await Linking.openURL(data.url);
+        } else {
+          console.warn('[OAuth] No URL returned from signInWithOAuth');
+        }
+      } catch (e: any) {
+        console.error('[OAuth] Unexpected error:', e);
+        setError(e.message ?? 'Something went wrong. Please try again.');
+      }
+    },
+    [],
+  );
 
   const handleSendLink = useCallback(async () => {
     const trimmed = email.trim().toLowerCase();
@@ -170,6 +214,11 @@ export default function SignInScreen() {
     outputRange: [0, -8],
   });
 
+  console.log('[DebugMagicLinkButton]', {
+    isSent,
+    hasFocusedEmail,
+  });
+
   return (
     <LinearGradient
       colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
@@ -180,6 +229,7 @@ export default function SignInScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
+          ref={scrollRef}
           style={styles.scrollView}
           contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}
           keyboardShouldPersistTaps="handled"
@@ -210,6 +260,21 @@ export default function SignInScreen() {
                     setEmail(text);
                     if (error) setError('');
                   }}
+                  onFocus={() => {
+                    console.log('[DebugMagicLinkButton] email onFocus');
+                    setHasFocusedEmail(true);
+                    setTimeout(() => {
+                      if (scrollRef.current) {
+                        scrollRef.current.scrollToEnd({ animated: true });
+                      }
+                    }, 50);
+                  }}
+                  onBlur={() => {
+                    console.log('[DebugMagicLinkButton] email onBlur, email value:', email);
+                    if (!email.trim()) {
+                      setHasFocusedEmail(false);
+                    }
+                  }}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -222,6 +287,34 @@ export default function SignInScreen() {
               </View>
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+              <View style={styles.oauthContainer}>
+                <Text style={styles.oauthLabel}>Or continue with</Text>
+                <View style={styles.oauthButtonsRow}>
+                  <Pressable
+                    onPress={() => handleOAuthSignIn('google')}
+                    style={({ pressed }) => [
+                      styles.oauthButton,
+                      styles.oauthGoogleButton,
+                      pressed && styles.oauthButtonPressed,
+                    ]}
+                    testID="sign-in-google-button"
+                  >
+                    <Text style={styles.oauthButtonText}>Continue with Google</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => handleOAuthSignIn('apple')}
+                    style={({ pressed }) => [
+                      styles.oauthButton,
+                      styles.oauthAppleButton,
+                      pressed && styles.oauthButtonPressed,
+                    ]}
+                    testID="sign-in-apple-button"
+                  >
+                    <Text style={styles.oauthButtonText}>Continue with Apple</Text>
+                  </Pressable>
+                </View>
+              </View>
             </>
           ) : (
             <Animated.View style={{ opacity: sentFade }}>
@@ -285,7 +378,7 @@ export default function SignInScreen() {
           )}
         </Animated.View>
 
-        {!isSent && (
+        {!isSent && hasFocusedEmail && (
           <Animated.View style={[styles.footer, { opacity: fadeAnim }]}>
             <Pressable
               onPress={handleSendLink}
@@ -391,6 +484,42 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     marginTop: 12,
+  },
+  oauthContainer: {
+    marginTop: 24,
+  },
+  oauthLabel: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  oauthButtonsRow: {
+    flexDirection: 'column',
+    gap: 10,
+  },
+  oauthButton: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  oauthGoogleButton: {
+    backgroundColor: Colors.surface,
+  },
+  oauthAppleButton: {
+    backgroundColor: Colors.cardBackground,
+  },
+  oauthButtonText: {
+    fontSize: 15,
+    color: Colors.text,
+    fontWeight: '500' as const,
+  },
+  oauthButtonPressed: {
+    opacity: 0.85,
   },
   sentIconContainer: {
     alignItems: 'center',
