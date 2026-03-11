@@ -15,7 +15,7 @@ export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const { client, isConnected } = useStreamChat();
+  const { client, isConnected, error, retry } = useStreamChat();
   const { setClient, setConnected } = useCommunityStore();
 
   useEffect(() => {
@@ -30,6 +30,31 @@ export default function CommunityScreen() {
   const handleChannelPress = (channelId: string) => {
     router.push(`/community/${channelId}`);
   };
+
+  if (error) {
+    return (
+      <LinearGradient
+        colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
+        style={styles.container}
+      >
+        <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
+          <Text style={styles.errorTitle}>Couldn&apos;t connect to Community</Text>
+          <Text style={styles.errorBody}>
+            Please check your connection and try again.
+          </Text>
+          <Pressable
+            onPress={retry}
+            style={({ pressed }) => [
+              styles.retryButton,
+              pressed && styles.retryButtonPressed,
+            ]}
+          >
+            <Text style={styles.retryText}>Try again</Text>
+          </Pressable>
+        </View>
+      </LinearGradient>
+    );
+  }
 
   if (!isConnected) {
     return (
@@ -100,6 +125,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: Colors.text,
+    textAlign: 'center',
+  },
+  errorBody: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
+  retryButton: {
+    marginTop: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: Colors.accent,
+  },
+  retryButtonPressed: {
+    opacity: 0.85,
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: Colors.background,
   },
   loadingText: {
     fontSize: 15,

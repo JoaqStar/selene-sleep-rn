@@ -18,6 +18,7 @@ import { useCommunityStore } from '@/stores/communityStore';
 import { useAuthStore } from '@/stores/authStore';
 import { COMMUNITY_CHANNELS } from '@/lib/stream/channels';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { hasSupabaseConfig, supabase } from '@/lib/supabase';
 
 interface StreamMessage {
   id: string;
@@ -118,11 +119,8 @@ export default function ChannelScreen() {
 
     return () => {
       isSubscribed = false;
-      if (channelRef.current) {
-        channelRef.current.stopWatching().catch((err: any) => {
-          console.error('[ChannelScreen] Stop watching error:', err);
-        });
-      }
+      // Avoid calling stopWatching after a global client disconnect.
+      // Stream client/channel lifecycle is managed elsewhere and the channel may already be unusable here.
     };
   }, [client, channelId, channelName, channelConfig?.description]);
 
@@ -180,6 +178,30 @@ export default function ChannelScreen() {
           await ch.deleteReaction(messageId, 'like', uid);
         } else {
           await ch.sendReaction(messageId, { type: 'like' });
+
+          // Fire-and-forget notification for post owner when a like is added
+          if (hasSupabaseConfig && supabase) {
+            const message = messages.find((m) => m.id === messageId);
+            const postOwnerId = message?.user?.id;
+            if (postOwnerId && postOwnerId !== uid) {
+              const snippet = (message?.text ?? '').slice(0, 80);
+              const url = `${getSupabaseUrl()}/functions/v1/notify-like`;
+              console.log('[ChannelScreen] notify-like →', { url, postOwnerId, actorUserId: uid, snippet });
+              fetch(url, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  postOwnerId,
+                  actorUserId: uid,
+                  messageSnippet: snippet,
+                }),
+              }).catch((err) => {
+                console.error('[ChannelScreen] notify-like error:', err);
+              });
+            }
+          }
         }
       } catch (err) {
         console.error('[ChannelScreen] Reaction error:', err);
@@ -332,6 +354,10 @@ export default function ChannelScreen() {
       </View>
     </KeyboardAvoidingView>
   );
+}
+
+function getSupabaseUrl(): string {
+  return (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').replace(/\/+$/, '');
 }
 
 const styles = StyleSheet.create({

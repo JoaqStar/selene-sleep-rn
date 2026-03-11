@@ -3,6 +3,9 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import * as Linking from 'expo-linking';
 import { useOnboardingStore } from '@/stores/onboardingStore';
+import { getExpoPushToken } from '@/lib/notifications';
+import { registerPushTokenForUser } from '@/lib/services/notificationService';
+import { Platform } from 'react-native';
 
 interface AuthState {
   session: Session | null;
@@ -55,19 +58,44 @@ export const useAuthStore = create<AuthState>((set) => ({
       handleDeepLink(event.url);
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       console.log('[Auth] Initial session:', session ? 'active' : 'none');
       console.log('[Auth] Initial session token:', session?.access_token);
       set({ session, isLoading: false });
+
+      if (session?.user?.id) {
+        const token = await getExpoPushToken();
+        if (token) {
+          await registerPushTokenForUser({
+            userId: session.user.id,
+            expoPushToken: token,
+            platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'unknown',
+          });
+        }
+      }
     }).catch((error) => {
       console.error('[Auth] Failed to get session:', error);
       set({ isLoading: false });
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log('[Auth] State changed:', _event, session ? 'active' : 'none');
-      set({ session });
-    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        console.log('[Auth] State changed:', _event, session ? 'active' : 'none');
+        set({ session });
+
+        if (session?.user?.id) {
+          const token = await getExpoPushToken();
+          if (token) {
+            await registerPushTokenForUser({
+              userId: session.user.id,
+              expoPushToken: token,
+              platform:
+                Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'unknown',
+            });
+          }
+        }
+      },
+    );
 
     return () => {
       linkSubscription.remove();

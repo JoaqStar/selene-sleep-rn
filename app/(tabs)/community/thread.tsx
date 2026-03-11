@@ -18,6 +18,7 @@ import { useCommunityStore } from '@/stores/communityStore';
 import { useAuthStore } from '@/stores/authStore';
 import { COMMUNITY_CHANNELS } from '@/lib/stream/channels';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { hasSupabaseConfig, supabase } from '@/lib/supabase';
 
 interface ThreadMessage {
   id: string;
@@ -149,13 +150,37 @@ export default function ThreadScreen() {
         parent_id: messageId,
       });
       flatListRef.current?.scrollToEnd({ animated: true });
+
+      // Fire-and-forget notification for parent post owner on new reply
+      if (hasSupabaseConfig && supabase && parentMessage?.user?.id && session?.user?.id) {
+        const postOwnerId = parentMessage.user.id;
+        const actorUserId = session.user.id;
+        if (postOwnerId !== actorUserId) {
+          const snippet = text.slice(0, 80);
+          const url = `${getSupabaseUrl()}/functions/v1/notify-comment`;
+          console.log('[ThreadScreen] notify-comment →', { url, postOwnerId, actorUserId, snippet });
+          fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              postOwnerId,
+              actorUserId,
+              messageSnippet: snippet,
+            }),
+          }).catch((err) => {
+            console.error('[ThreadScreen] notify-comment error:', err);
+          });
+        }
+      }
     } catch (err) {
       console.error('[ThreadScreen] Send reply error:', err);
       setInputText(text);
     } finally {
       setIsSending(false);
     }
-  }, [inputText, isSending, messageId]);
+  }, [inputText, isSending, messageId, parentMessage, session?.user?.id]);
 
   const currentUserId = session?.user?.id;
 
@@ -200,6 +225,31 @@ export default function ThreadScreen() {
           await ch.deleteReaction(messageIdToToggle, 'like', uid);
         } else {
           await ch.sendReaction(messageIdToToggle, { type: 'like' });
+
+          // Fire-and-forget notification when a comment/parent is liked
+          if (hasSupabaseConfig && supabase) {
+            const target = isParent
+              ? parentMessage
+              : replies.find((m) => m.id === messageIdToToggle);
+            const postOwnerId = target?.user?.id;
+            if (postOwnerId && postOwnerId !== uid) {
+              const snippet = (target?.text ?? '').slice(0, 80);
+              const url = `${getSupabaseUrl()}/functions/v1/notify-like`;
+              fetch(url, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  postOwnerId,
+                  actorUserId: uid,
+                  messageSnippet: snippet,
+                }),
+              }).catch((err) => {
+                console.error('[ThreadScreen] notify-like error:', err);
+              });
+            }
+          }
         }
       } catch (err) {
         console.error('[ThreadScreen] Reaction error:', err);
@@ -333,6 +383,10 @@ export default function ThreadScreen() {
       </View>
     </KeyboardAvoidingView>
   );
+}
+
+function getSupabaseUrl(): string {
+  return (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').replace(/\/+$/, '');
 }
 
 const styles = StyleSheet.create({

@@ -2,6 +2,7 @@ import '@/lib/polyfills/punycode-polyfill';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, Redirect } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import * as Notifications from "expo-notifications";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
@@ -22,6 +23,18 @@ function RootLayoutNav() {
     loadOnboardingState();
     const unsubscribe = initialize();
     return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as any;
+      console.log('[Notifications] Response received', data);
+      // In a future iteration, we can deep link into specific screens based on data.type/deepLink.
+    });
+
+    return () => {
+      responseSub.remove();
+    };
   }, []);
 
   useEffect(() => {

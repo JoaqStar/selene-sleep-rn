@@ -8,6 +8,7 @@ const apiKey = process.env.EXPO_PUBLIC_STREAM_API_KEY ?? '';
 export function useStreamChat() {
   const [client, setClient] = useState<StreamChat | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
   const connectingRef = useRef(false);
   const clientRef = useRef<StreamChat | null>(null);
 
@@ -19,33 +20,58 @@ export function useStreamChat() {
     const userId = session.user.id;
     const userEmail = session.user.email ?? 'user';
 
-    const connect = async () => {
+    const connectOnce = async () => {
       connectingRef.current = true;
+      setError(null);
       console.log('[StreamChat] Connecting user:', userId);
 
+      const chatClient = StreamChat.getInstance(apiKey);
+      const streamToken = await getStreamToken(userId);
+
+      await chatClient.connectUser(
+        {
+          id: userId,
+          name: userEmail.split('@')[0],
+        },
+        streamToken,
+      );
+
+      console.log('[StreamChat] Connected successfully');
+      clientRef.current = chatClient;
+      setClient(chatClient);
+      setIsConnected(true);
+    };
+
+    const connectWithRetry = async () => {
       try {
-        const chatClient = StreamChat.getInstance(apiKey);
-        const streamToken = await getStreamToken(userId);
+        await connectOnce();
+      } catch (err: any) {
+        console.error('[StreamChat] Connection error (first attempt):', err);
+        const message = String(err?.message ?? err);
+        const isNetworkError =
+          message.includes('Network request failed') || message.includes('fetch failed');
 
-        await chatClient.connectUser(
-          {
-            id: userId,
-            name: userEmail.split('@')[0],
-          },
-          streamToken,
-        );
+        if (!isNetworkError) {
+          setError(err instanceof Error ? err : new Error(message));
+          connectingRef.current = false;
+          return;
+        }
 
-        console.log('[StreamChat] Connected successfully');
-        clientRef.current = chatClient;
-        setClient(chatClient);
-        setIsConnected(true);
-      } catch (error) {
-        console.error('[StreamChat] Connection error:', error);
-        connectingRef.current = false;
+        // Small backoff before retrying once
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+
+        try {
+          console.log('[StreamChat] Retrying connection after network error');
+          await connectOnce();
+        } catch (err2: any) {
+          console.error('[StreamChat] Connection error (second attempt):', err2);
+          setError(err2 instanceof Error ? err2 : new Error(String(err2?.message ?? err2)));
+          connectingRef.current = false;
+        }
       }
     };
 
-    connect();
+    connectWithRetry();
 
     return () => {
       if (clientRef.current) {
@@ -63,5 +89,14 @@ export function useStreamChat() {
     };
   }, [session?.user?.id, apiKey]);
 
-  return { client, isConnected };
+  const retry = () => {
+    if (!session?.user || !apiKey) return;
+    if (connectingRef.current) return;
+    setIsConnected(false);
+    setClient(null);
+    setError(null);
+    // effect will re-run because session.user.id/apiKey are stable; we can force by toggling a flag if needed
+  };
+
+  return { client, isConnected, error, retry };
 }

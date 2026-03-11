@@ -103,6 +103,121 @@ Email magic links currently use the confirmation page on S3; Google/Apple OAuth 
 
 Deep links are handled in `stores/authStore.ts` by parsing `access_token` and `refresh_token` from the callback URL and calling `supabase.auth.setSession`.
 
+## Push Notifications
+
+Selene uses Expo + Supabase to deliver push notifications for community activity and new content.
+
+### Expo client setup
+
+- The app uses `expo-notifications` to register the device and obtain an Expo push token.
+- On sign-in, `stores/authStore.ts`:
+  - Requests OS notification permission (with graceful handling on simulators).
+  - Calls `getExpoPushToken()` from `lib/notifications.ts`.
+  - Registers the token with Supabase via `registerPushTokenForUser()` in `lib/services/notificationService.ts`.
+
+You must rebuild native apps after adding `expo-notifications`:
+
+- iOS: `npx expo prebuild --platform ios` then `cd ios && pod install`.
+- Android: `npx expo prebuild --platform android` or `npx expo run:android`.
+
+### Supabase schema
+
+Create these tables in your Supabase project (SQL example, adjust as needed):
+
+```sql
+create table public.user_push_tokens (
+  user_id uuid references auth.users not null,
+  expo_push_token text not null,
+  platform text not null default 'unknown',
+  is_active boolean not null default true,
+  last_seen_at timestamptz default now(),
+  primary key (user_id, expo_push_token)
+);
+
+create table public.notification_preferences (
+  user_id uuid references auth.users primary key,
+  likes_enabled boolean not null default true,
+  comments_enabled boolean not null default true,
+  new_content_enabled boolean not null default true,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+```
+
+Recommended RLS (simplified):
+
+```sql
+alter table public.user_push_tokens enable row level security;
+alter table public.notification_preferences enable row level security;
+
+create policy "Users manage own tokens"
+  on public.user_push_tokens
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Users manage own notification preferences"
+  on public.notification_preferences
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+```
+
+### Edge Functions
+
+In `supabase/functions` the following functions are scaffolded:
+
+- `send-push`: generic helper that:
+  - Looks up `user_push_tokens` for a `userId`.
+  - Calls the Expo Push API (`https://exp.host/--/api/v2/push/send`).
+  - Is intended to be called **only from other Edge Functions** using the service role key.
+- `notify-like`:
+  - Accepts `{ postOwnerId, actorUserId, messageSnippet }`.
+  - Checks `notification_preferences.likes_enabled`.
+  - Sends a push like “New like on your post” via `send-push`.
+- `notify-comment`:
+  - Accepts `{ postOwnerId, actorUserId, messageSnippet }`.
+  - Checks `notification_preferences.comments_enabled`.
+  - Sends a push like “New comment on your post” via `send-push`.
+- `notify-new-content`:
+  - Accepts `{ title, body, deepLink }`.
+  - Selects all users with `new_content_enabled = true`.
+  - Sends a generic “New session/article available” push to each.
+
+Deploy these with the Supabase CLI from the project root:
+
+```bash
+supabase functions deploy send-push
+supabase functions deploy notify-like
+supabase functions deploy notify-comment
+supabase functions deploy notify-new-content
+```
+
+Ensure the Edge Functions have `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set in their environment.
+
+### In-app notification settings
+
+- `app/(tabs)/settings/index.tsx` adds a **Settings → Notifications** screen.
+- It reads/writes the `notification_preferences` row for the current user via Supabase.
+- Toggles:
+  - Likes on my posts
+  - Comments/replies on my posts
+  - New sessions & articles
+
+### Community triggers
+
+- Channel likes (`app/(tabs)/community/[channelId].tsx`):
+  - After a like is successfully sent to Stream, the app fires a best-effort POST to `notify-like` for the post owner (if Supabase is configured).
+- Thread likes and replies (`app/(tabs)/community/thread.tsx`):
+  - Likes call `notify-like` for the parent or reply author.
+  - New replies are good candidates to call `notify-comment` if you want per-reply notifications.
+
+### Handling notification taps
+
+- `app/_layout.tsx` registers a `Notifications.addNotificationResponseReceivedListener`.
+- Today it logs the notification data and is ready to be extended to:
+  - Navigate into the relevant community thread or content screen based on `data.type` / `data.deepLink`.
+
 ## How can I edit this code?
 
 There are several ways of editing your native mobile application.
