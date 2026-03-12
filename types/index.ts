@@ -9,6 +9,7 @@ export interface Session {
   is_published: boolean;
   sort_order: number;
   instructor?: string;
+  teacher_name?: string;
 }
 
 export interface Article {

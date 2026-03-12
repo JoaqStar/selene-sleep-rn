@@ -18,6 +18,7 @@ export async function getSessions(): Promise<Session[]> {
       is_published: true,
       sort_order: index,
       instructor: s.instructor,
+      teacher_name: s.instructor,
     }));
   }
 

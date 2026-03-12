@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import { Play, Clock } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,6 +13,7 @@ interface SessionCardProps {
 
 export default React.memo(function SessionCard({ session, onPress, compact = false }: SessionCardProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
   const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, {
@@ -84,7 +85,24 @@ export default React.memo(function SessionCard({ session, onPress, compact = fal
               <Text style={styles.title} numberOfLines={2}>{session.title}</Text>
               {session.instructor ? <Text style={styles.instructor}>{session.instructor}</Text> : null}
               {session.description ? (
-                <Text style={styles.description} numberOfLines={2}>{session.description}</Text>
+                <>
+                  <Text
+                    style={styles.description}
+                    numberOfLines={isDescriptionExpanded ? undefined : 2}
+                  >
+                    {session.description}
+                  </Text>
+                  {session.description.length > 110 && (
+                    <Pressable
+                      onPress={() => setIsDescriptionExpanded((prev) => !prev)}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.moreLess}>
+                        {isDescriptionExpanded ? 'Show less' : 'Read more'}
+                      </Text>
+                    </Pressable>
+                  )}
+                </>
               ) : null}
             </View>
             <View style={styles.rightSection}>
@@ -136,6 +154,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textSecondary,
     lineHeight: 18,
+  },
+  moreLess: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '500' as const,
+    color: Colors.accent,
   },
   rightSection: {
     alignItems: 'flex-end',

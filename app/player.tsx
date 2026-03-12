@@ -27,6 +27,7 @@ export default function PlayerScreen() {
   } = usePlayerStore();
 
   const soundRef = useRef<Audio.Sound | null>(null);
+  const loadIdRef = useRef(0);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
   const playButtonScale = useRef(new Animated.Value(1)).current;
@@ -56,21 +57,41 @@ export default function PlayerScreen() {
 
   useEffect(() => {
     let mounted = true;
+    const loadId = ++loadIdRef.current;
 
     async function loadAudio() {
       if (!currentSession) return;
       try {
-        console.log('Loading audio for:', currentSession.title);
+        console.log('[DebugPlayerAudio] Loading audio for:', currentSession.title, 'loadId =', loadId);
         await Audio.setAudioModeAsync({
           playsInSilentModeIOS: true,
           staysActiveInBackground: false,
         });
 
+        // Stop and unload any existing sound before loading a new one.
+        if (soundRef.current) {
+          try {
+            console.log('[DebugPlayerAudio] Stopping existing sound before loading new one');
+            await soundRef.current.stopAsync();
+          } catch (e) {
+            console.warn('[DebugPlayerAudio] Error stopping existing sound before load', e);
+          }
+          try {
+            await soundRef.current.unloadAsync();
+          } catch (e) {
+            console.warn('[DebugPlayerAudio] Error unloading existing sound before load', e);
+          }
+          soundRef.current = null;
+        }
+
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: currentSession.audio_url },
           { shouldPlay: true, progressUpdateIntervalMillis: 500 },
           (status) => {
-            if (!mounted) return;
+            // Ignore callbacks for stale loads or unmounted component
+            if (!mounted || loadId !== loadIdRef.current) {
+              return;
+            }
             if (status.isLoaded) {
               setPosition(status.positionMillis);
               if (status.durationMillis) {
@@ -79,28 +100,48 @@ export default function PlayerScreen() {
               setIsPlaying(status.isPlaying);
               setIsBuffering(status.isBuffering);
               if (status.didJustFinish) {
+                console.log('[DebugPlayerAudio] Playback finished for', currentSession.title);
                 setIsPlaying(false);
                 setPosition(0);
               }
+            } else {
+              console.log('[DebugPlayerAudio] Status not loaded yet', status);
             }
           }
         );
 
+        if (!mounted || loadId !== loadIdRef.current) {
+          console.log('[DebugPlayerAudio] Load completed but is stale, unloading sound', { loadId, currentLoadId: loadIdRef.current });
+          try {
+            await newSound.stopAsync();
+          } catch (e) {
+            console.warn('[DebugPlayerAudio] Error stopping stale sound after load', e);
+          }
+          try {
+            await newSound.unloadAsync();
+          } catch (e) {
+            console.warn('[DebugPlayerAudio] Error unloading stale sound after load', e);
+          }
+          return;
+        }
+
         if (mounted) {
           soundRef.current = newSound;
           setIsPlaying(true);
-          console.log('Audio loaded and playing');
+          console.log('[DebugPlayerAudio] Audio loaded and playing, loadId =', loadId);
         }
       } catch (error) {
-        console.error('Error loading audio:', error);
+        console.error('[DebugPlayerAudio] Error loading audio:', error);
         if (mounted) {
           setIsBuffering(false);
         }
       }
     }
 
-    setIsBuffering(true);
-    loadAudio();
+    if (currentSession) {
+      setIsBuffering(true);
+      loadAudio();
+    }
 
     return () => {
       mounted = false;
@@ -110,9 +151,17 @@ export default function PlayerScreen() {
   useEffect(() => {
     return () => {
       if (soundRef.current) {
-        console.log('Unloading sound on unmount');
-        soundRef.current.unloadAsync();
+        const sound = soundRef.current;
         soundRef.current = null;
+        // Invalidate any pending loads so callbacks ignore stale events.
+        loadIdRef.current += 1;
+        console.log('[DebugPlayerAudio] Unmounting player, stopping and unloading sound');
+        sound.stopAsync().catch((e) => {
+          console.warn('[DebugPlayerAudio] Error stopping sound on unmount', e);
+        });
+        sound.unloadAsync().catch((e) => {
+          console.warn('[DebugPlayerAudio] Error unloading sound on unmount', e);
+        });
       }
     };
   }, []);
@@ -127,8 +176,10 @@ export default function PlayerScreen() {
     ]).start();
 
     if (isPlaying) {
+      console.log('[DebugPlayerAudio] Pausing playback');
       await sound.pauseAsync();
     } else {
+      console.log('[DebugPlayerAudio] Resuming/starting playback');
       await sound.playAsync();
     }
   }, [isPlaying, playButtonScale]);
@@ -142,19 +193,25 @@ export default function PlayerScreen() {
   }, [positionMillis, durationMillis]);
 
   const handleClose = useCallback(async () => {
+    console.log('[DebugPlayerAudio] handleClose called');
+    // Invalidate any in-flight load so that when it completes, it immediately unloads.
+    loadIdRef.current += 1;
     if (soundRef.current) {
       try {
+        console.log('[DebugPlayerAudio] Stopping sound on close');
         await soundRef.current.stopAsync();
       } catch (e) {
-        console.warn('Error stopping sound on close', e);
+        console.warn('[DebugPlayerAudio] Error stopping sound on close', e);
       }
       try {
+        console.log('[DebugPlayerAudio] Unloading sound on close');
         await soundRef.current.unloadAsync();
       } catch (e) {
-        console.warn('Error unloading sound on close', e);
+        console.warn('[DebugPlayerAudio] Error unloading sound on close', e);
       }
       soundRef.current = null;
     }
+    console.log('[DebugPlayerAudio] Clearing session and navigating back');
     clearSession();
     router.back();
   }, [clearSession, router]);
@@ -198,9 +255,10 @@ export default function PlayerScreen() {
           </Animated.View>
 
           <Text style={styles.sessionTitle}>{currentSession.title}</Text>
-          {currentSession.instructor ? <Text style={styles.sessionInstructor}>{currentSession.instructor}</Text> : null}
-          {currentSession.description ? (
-            <Text style={styles.sessionDescription} numberOfLines={2}>{currentSession.description}</Text>
+          {((currentSession as any).teacher_name || currentSession.instructor) ? (
+            <Text style={styles.sessionInstructor}>
+              By {(currentSession as any).teacher_name || currentSession.instructor}
+            </Text>
           ) : null}
         </View>
 
@@ -315,10 +373,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   sessionInstructor: {
-    fontSize: 15,
-    color: Colors.accent,
-    fontWeight: '500' as const,
-    marginBottom: 8,
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontWeight: '400' as const,
+    marginBottom: 18,
+    letterSpacing: 0.4,
   },
   sessionDescription: {
     fontSize: 14,
