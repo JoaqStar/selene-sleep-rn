@@ -124,6 +124,15 @@ export default function ChannelScreen() {
     };
   }, [client, channelId, channelName, channelConfig?.description]);
 
+  // Ensure we always start scrolled to the latest messages when the list loads or updates.
+  useEffect(() => {
+    if (!flatListRef.current || messages.length === 0) return;
+    const timeout = setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: false });
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [messages.length]);
+
   const handleSend = useCallback(async () => {
     const text = inputText.trim();
     if (!text || !channelRef.current || isSending) return;
@@ -402,7 +411,9 @@ const styles = StyleSheet.create({
   messageList: {
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 8,
+    // Extra bottom padding so the last message isn't hidden
+    // behind the input bar at the bottom.
+    paddingBottom: 80,
   },
   messageBubbleWrap: {
     marginBottom: 12,

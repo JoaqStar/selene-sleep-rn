@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { StreamChat } from 'stream-chat';
 import { useAuthStore } from '@/stores/authStore';
+import { useOnboardingStore } from '@/stores/onboardingStore';
 import { getStreamToken } from '@/lib/services/streamService';
 
 const apiKey = process.env.EXPO_PUBLIC_STREAM_API_KEY ?? '';
@@ -13,12 +14,16 @@ export function useStreamChat() {
   const clientRef = useRef<StreamChat | null>(null);
 
   const { session } = useAuthStore();
+  const { userName } = useOnboardingStore();
 
   useEffect(() => {
     if (!session?.user || !apiKey || connectingRef.current) return;
 
     const userId = session.user.id;
     const userEmail = session.user.email ?? 'user';
+    const displayName = (userName && userName.trim().length > 0)
+      ? userName.trim()
+      : userEmail.split('@')[0];
 
     const connectOnce = async () => {
       connectingRef.current = true;
@@ -31,7 +36,7 @@ export function useStreamChat() {
       await chatClient.connectUser(
         {
           id: userId,
-          name: userEmail.split('@')[0],
+          name: displayName,
         },
         streamToken,
       );
@@ -87,7 +92,7 @@ export function useStreamChat() {
         connectingRef.current = false;
       }
     };
-  }, [session?.user?.id, apiKey]);
+  }, [session?.user?.id, apiKey, userName]);
 
   const retry = () => {
     if (!session?.user || !apiKey) return;

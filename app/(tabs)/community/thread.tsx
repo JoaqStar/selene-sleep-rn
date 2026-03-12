@@ -137,6 +137,17 @@ export default function ThreadScreen() {
     };
   }, [client, channelId, messageId, channelName, channelConfig?.description]);
 
+  // Ensure we always start scrolled to the latest messages when the thread loads or updates.
+  useEffect(() => {
+    if (!flatListRef.current) return;
+    const hasData = parentMessage !== null || replies.length > 0;
+    if (!hasData) return;
+    const timeout = setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: false });
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [parentMessage?.id, replies.length]);
+
   const handleSendReply = useCallback(async () => {
     const text = inputText.trim();
     if (!text || !channelRef.current || isSending || !messageId) return;
@@ -431,7 +442,9 @@ const styles = StyleSheet.create({
   messageList: {
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 8,
+    // Extra bottom padding so the last reply isn't hidden
+    // behind the input bar at the bottom.
+    paddingBottom: 80,
   },
   messageBubbleWrap: {
     marginBottom: 12,
