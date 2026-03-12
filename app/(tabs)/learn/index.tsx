@@ -9,7 +9,12 @@ import { useArticles } from '@/lib/hooks/useArticlesQuery';
 import { Article } from '@/types';
 import ArticleCard from '@/components/ArticleCard';
 
-const CATEGORIES = ['All', 'Understanding Your Body', 'Sleep Science', 'Symptom Support'] as const;
+const CATEGORY_FILTERS = [
+  { label: 'All', value: null },
+  { label: 'Understanding your body', value: 'understanding-your-body' },
+  { label: 'Sleep science', value: 'sleep-science' },
+  { label: 'Symptom support', value: 'symptom-support' },
+] as const;
 
 export default function LearnScreen() {
   const insets = useSafeAreaInsets();
@@ -19,9 +24,11 @@ export default function LearnScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const articles = data ?? [];
-  const filteredArticles = activeCategory === 'All'
-    ? articles
-    : articles.filter((a) => a.category === activeCategory);
+  const activeFilter = CATEGORY_FILTERS.find((c) => c.label === activeCategory);
+  const filteredArticles =
+    !activeFilter || !activeFilter.value
+      ? articles
+      : articles.filter((a) => a.category === activeFilter.value);
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
@@ -68,17 +75,17 @@ export default function LearnScreen() {
             style={styles.categoryScroll}
             contentContainerStyle={styles.categoryContainer}
           >
-            {CATEGORIES.map((cat) => {
-              const isActive = cat === activeCategory;
+            {CATEGORY_FILTERS.map((cat) => {
+              const isActive = cat.label === activeCategory;
               return (
                 <Pressable
-                  key={cat}
-                  onPress={() => setActiveCategory(cat)}
-                  testID={`learn-category-${cat}`}
+                  key={cat.label}
+                  onPress={() => setActiveCategory(cat.label)}
+                  testID={`learn-category-${cat.label}`}
                 >
                   <View style={[styles.categoryPill, isActive && styles.categoryPillActive]}>
                     <Text style={[styles.categoryPillText, isActive && styles.categoryPillTextActive]}>
-                      {cat}
+                      {cat.label}
                     </Text>
                   </View>
                 </Pressable>

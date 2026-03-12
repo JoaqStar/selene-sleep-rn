@@ -28,12 +28,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     const handleDeepLink = async (url: string) => {
       console.log('[Auth] Deep link received:', url);
       try {
-        const hashIndex = url.indexOf('#');
-        if (hashIndex === -1) return;
-        const fragment = url.substring(hashIndex + 1);
-        const params = new URLSearchParams(fragment);
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
+        const parsed = new URL(url);
+        const hashParams = new URLSearchParams(parsed.hash?.startsWith('#') ? parsed.hash.slice(1) : parsed.hash ?? '');
+        const searchParams = parsed.searchParams;
+
+        const accessToken =
+          hashParams.get('access_token') ?? searchParams.get('access_token');
+        const refreshToken =
+          hashParams.get('refresh_token') ?? searchParams.get('refresh_token');
+        const code = hashParams.get('code') ?? searchParams.get('code');
+
         if (accessToken && refreshToken) {
           console.log('[Auth] Setting session from deep link tokens');
           const { data, error } = await supabase.auth.setSession({
@@ -45,7 +49,21 @@ export const useAuthStore = create<AuthState>((set) => ({
           } else {
             console.log('[Auth] Session set from deep link:', data.session ? 'active' : 'none');
           }
+          return;
         }
+
+        if (code) {
+          console.log('[Auth] Exchanging authorization code for session');
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            console.error('[Auth] exchangeCodeForSession error:', error);
+          } else {
+            console.log('[Auth] Session obtained from authorization code:', data.session ? 'active' : 'none');
+          }
+          return;
+        }
+
+        console.warn('[Auth] Deep link did not contain tokens or code');
       } catch (e) {
         console.error('[Auth] Deep link handling error:', e);
       }
@@ -120,6 +138,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signOut: async () => {
     try {
+      // Immediately clear local session so the UI returns to the sign-in screen
+      set({ session: null });
+
       await useOnboardingStore.getState().resetOnboarding();
       if (supabase) {
         await supabase.auth.signOut();
