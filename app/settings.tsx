@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Switch, ScrollView, TextInput, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Switch, ScrollView, TextInput, Pressable, Linking, Platform, AppState, AppStateStatus } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
@@ -32,6 +33,7 @@ export default function SettingsScreen() {
   const [isSavingName, setIsSavingName] = useState(false);
   const [systemNotificationsEnabled, setSystemNotificationsEnabled] = useState<boolean | null>(null);
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const handleSaveName = useCallback(async () => {
     const trimmed = name.trim();
@@ -56,6 +58,13 @@ export default function SettingsScreen() {
     await signOut();
     router.replace('/sign-in');
   }, [signOut, router]);
+
+  const handleOpenSystemSettings = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Linking.openSettings().catch((error) => {
+      console.error('[Settings] Failed to open system settings', error);
+    });
+  }, []);
 
   const loadPreferences = useCallback(async () => {
     if (!hasSupabaseConfig || !supabase || !session?.user?.id) return;
@@ -97,21 +106,53 @@ export default function SettingsScreen() {
     setOriginalName(userName);
   }, [userName]);
 
-  useEffect(() => {
-    // Reflect OS-level notification permission in the UI
-    (async () => {
-      try {
-        const settings = await Notifications.getPermissionsAsync();
-        const granted =
-          settings.granted ||
-          settings.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
-        setSystemNotificationsEnabled(granted);
-      } catch (error) {
-        console.error('[Settings] Failed to read system notification permissions', error);
-        setSystemNotificationsEnabled(null);
-      }
-    })();
+  const refreshSystemNotificationPermissions = useCallback(async () => {
+    console.log('[DebugPushSettingsPermission] Refreshing system notification permissions');
+    try {
+      const settings = await Notifications.getPermissionsAsync();
+      console.log('[DebugPushSettingsPermission] Permissions response:', settings);
+      const granted =
+        settings.granted ||
+        settings.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+      setSystemNotificationsEnabled(granted);
+      console.log('[DebugPushSettingsPermission] Computed granted =', granted);
+    } catch (error) {
+      console.error('[Settings] Failed to read system notification permissions', error);
+      setSystemNotificationsEnabled(null);
+    }
   }, []);
+
+  useEffect(() => {
+    // Initial read of OS-level notification permission for the banner and switch enabled state.
+    console.log('[DebugPushSettingsPermission] Running initial permission check');
+    refreshSystemNotificationPermissions();
+  }, [refreshSystemNotificationPermissions]);
+
+  useFocusEffect(
+    useCallback(() => {
+      // When returning to this screen (e.g. from system Settings), refresh permission state
+      // so the banner and disabled switches update immediately.
+      console.log('[DebugPushSettingsPermission] Screen focused, refreshing permissions');
+      refreshSystemNotificationPermissions();
+    }, [refreshSystemNotificationPermissions]),
+  );
+
+  useEffect(() => {
+    // Also listen for app foreground transitions, since coming back from the OS Settings app
+    // may not always trigger a navigation focus event (especially on Android).
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      console.log('[DebugPushSettingsPermission] AppState changed to', nextState);
+      if (nextState === 'active') {
+        console.log('[DebugPushSettingsPermission] App became active, refreshing permissions');
+        refreshSystemNotificationPermissions();
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, [refreshSystemNotificationPermissions]);
 
   const updatePreference = async (key: keyof NotificationPreferences, value: boolean) => {
     setPrefs((prev) => ({ ...prev, [key]: value }));
@@ -151,165 +192,192 @@ export default function SettingsScreen() {
       colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
       style={styles.container}
     >
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.headerRow}>
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={12}
-            testID="settings-back-button"
-          >
-            <ChevronLeft size={20} color={Colors.text} />
-          </Pressable>
-          <Text style={styles.heading}>Settings</Text>
-          <View style={{ width: 20 }} />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.subheading}>Your name</Text>
-          <Text style={styles.subtitle}>
-            This is how Selene will greet you on the Home screen.
-          </Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Your name"
-            placeholderTextColor={Colors.textMuted}
-            value={name}
-            onChangeText={setName}
-            returnKeyType="done"
-          />
-          <View style={styles.nameActionsRow}>
+      <View style={styles.inner}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.headerRow}>
             <Pressable
-              onPress={handleCancelName}
-              disabled={name.trim() === (originalName || '').trim()}
-              style={({ pressed }) => [
-                styles.nameSecondaryButton,
-                (pressed && name.trim() !== (originalName || '').trim()) && styles.nameSecondaryButtonPressed,
-              ]}
+              onPress={() => router.back()}
+              hitSlop={12}
+              testID="settings-back-button"
             >
-              <Text
-                style={[
-                  styles.nameSecondaryText,
-                  name.trim() === (originalName || '').trim() && styles.nameDisabledText,
+              <ChevronLeft size={20} color={Colors.text} />
+            </Pressable>
+            <Text style={styles.heading}>Settings</Text>
+            <View style={{ width: 20 }} />
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.subheading}>Your name</Text>
+            <Text style={styles.subtitle}>
+              This is how Selene will greet you on the Home screen.
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Your name"
+              placeholderTextColor={Colors.textMuted}
+              value={name}
+              onChangeText={setName}
+              returnKeyType="done"
+            />
+            <View style={styles.nameActionsRow}>
+              <Pressable
+                onPress={handleCancelName}
+                disabled={name.trim() === (originalName || '').trim()}
+                style={({ pressed }) => [
+                  styles.nameSecondaryButton,
+                  (pressed && name.trim() !== (originalName || '').trim()) &&
+                    styles.nameSecondaryButtonPressed,
                 ]}
               >
-                Cancel
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={handleSaveName}
-              disabled={
-                isSavingName ||
-                !name.trim() ||
-                name.trim() === (originalName || '').trim()
-              }
-              style={({ pressed }) => [
-                styles.namePrimaryButton,
-                (pressed &&
-                  !isSavingName &&
-                  name.trim() &&
-                  name.trim() !== (originalName || '').trim()) &&
-                  styles.namePrimaryButtonPressed,
-              ]}
-            >
-              <Text style={styles.namePrimaryText}>
-                {isSavingName ? 'Saving…' : 'Save'}
-              </Text>
-            </Pressable>
+                <Text
+                  style={[
+                    styles.nameSecondaryText,
+                    name.trim() === (originalName || '').trim() && styles.nameDisabledText,
+                  ]}
+                >
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSaveName}
+                disabled={
+                  isSavingName ||
+                  !name.trim() ||
+                  name.trim() === (originalName || '').trim()
+                }
+                style={({ pressed }) => [
+                  styles.namePrimaryButton,
+                  (pressed &&
+                    !isSavingName &&
+                    name.trim() &&
+                    name.trim() !== (originalName || '').trim()) &&
+                    styles.namePrimaryButtonPressed,
+                ]}
+              >
+                <Text style={styles.namePrimaryText}>
+                  {isSavingName ? 'Saving…' : 'Save'}
+                </Text>
+              </Pressable>
+            </View>
           </View>
-        </View>
 
-        <Text style={styles.subheading}>Notifications</Text>
-        <Text style={styles.subtitle}>
-          Control when Selene can send you push notifications.
-        </Text>
+          <Text style={styles.subheading}>Notifications</Text>
+          <Text style={styles.subtitle}>
+            Control when Selene can send you push notifications.
+          </Text>
 
-        {!hasSupabaseConfig && (
-          <View style={styles.banner}>
-            <Text style={styles.bannerText}>
-              Notifications are not fully configured yet. Supabase credentials are missing.
-            </Text>
-          </View>
-        )}
-
-        {systemNotificationsEnabled === false && (
-          <View style={styles.bannerWarning}>
-            <Text style={styles.bannerWarningText}>
-              Push notifications are turned off in your device settings. Turn them on in the
-              iOS/Android Settings app for Selene for these toggles to take effect.
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.section}>
-          <View style={styles.row}>
-            <View style={styles.labelColumn}>
-              <Text style={styles.label}>Likes on my posts</Text>
-              <Text style={styles.labelSub}>
-                Get notified when someone likes something you shared in the community.
+          {!hasSupabaseConfig && (
+            <View style={styles.banner}>
+              <Text style={styles.bannerText}>
+                Notifications are not fully configured yet. Supabase credentials are missing.
               </Text>
             </View>
-            <Switch
-              value={prefs.likes_enabled}
-              onValueChange={(value) => updatePreference('likes_enabled', value)}
-              thumbColor={prefs.likes_enabled ? Colors.accent : Colors.surface}
-              trackColor={{ true: Colors.accentDim, false: Colors.borderLight }}
-              disabled={isLoading || systemNotificationsEnabled === false}
-            />
-          </View>
+          )}
 
-          <View style={styles.row}>
-            <View style={styles.labelColumn}>
-              <Text style={styles.label}>Comments and replies</Text>
-              <Text style={styles.labelSub}>
-                Be alerted when someone comments on or replies to your posts.
+          {systemNotificationsEnabled === false && (
+            <View style={styles.bannerWarning}>
+              <Text style={styles.bannerWarningText}>
+                Push notifications are turned off in your device settings. Turn them on in the
+                Settings app for Selene for these toggles to take effect.
               </Text>
+              <Pressable
+                onPress={handleOpenSystemSettings}
+                style={({ pressed }) => [
+                  styles.bannerButton,
+                  pressed && styles.bannerButtonPressed,
+                ]}
+              >
+                <Text style={styles.bannerButtonText}>
+                  {Platform.OS === 'ios' ? 'Open iOS Settings' : 'Open Android Settings'}
+                </Text>
+              </Pressable>
             </View>
-            <Switch
-              value={prefs.comments_enabled}
-              onValueChange={(value) => updatePreference('comments_enabled', value)}
-              thumbColor={prefs.comments_enabled ? Colors.accent : Colors.surface}
-              trackColor={{ true: Colors.accentDim, false: Colors.borderLight }}
-              disabled={isLoading || systemNotificationsEnabled === false}
-            />
-          </View>
+          )}
 
-          <View style={styles.row}>
-            <View style={styles.labelColumn}>
-              <Text style={styles.label}>New sessions & articles</Text>
-              <Text style={styles.labelSub}>
-                Hear about new sleep sessions, stories, and learn content as it arrives.
-              </Text>
+          <View style={styles.section}>
+            <View style={styles.row}>
+              <View style={styles.labelColumn}>
+                <Text style={styles.label}>Likes on my posts</Text>
+                <Text style={styles.labelSub}>
+                  Get notified when someone likes something you shared in the community.
+                </Text>
+              </View>
+              <Switch
+                value={prefs.likes_enabled}
+                onValueChange={(value) => updatePreference('likes_enabled', value)}
+                trackColor={{ true: Colors.accentDim, false: Colors.borderLight }}
+                thumbColor={prefs.likes_enabled ? Colors.accent : Colors.surface}
+                ios_backgroundColor={Colors.borderLight}
+                disabled={isLoading || systemNotificationsEnabled === false}
+              />
             </View>
-            <Switch
-              value={prefs.new_content_enabled}
-              onValueChange={(value) => updatePreference('new_content_enabled', value)}
-              thumbColor={prefs.new_content_enabled ? Colors.accent : Colors.surface}
-              trackColor={{ true: Colors.accentDim, false: Colors.borderLight }}
-              disabled={isLoading || systemNotificationsEnabled === false}
-            />
-          </View>
-        </View>
 
-        <Pressable
-          onPress={handleSignOut}
-          style={({ pressed }) => [
-            styles.logoutButton,
-            pressed && styles.logoutButtonPressed,
+            <View style={styles.row}>
+              <View style={styles.labelColumn}>
+                <Text style={styles.label}>Comments and replies</Text>
+                <Text style={styles.labelSub}>
+                  Be alerted when someone comments on or replies to your posts.
+                </Text>
+              </View>
+              <Switch
+                value={prefs.comments_enabled}
+                onValueChange={(value) => updatePreference('comments_enabled', value)}
+                trackColor={{ true: Colors.accentDim, false: Colors.borderLight }}
+                thumbColor={prefs.comments_enabled ? Colors.accent : Colors.surface}
+                ios_backgroundColor={Colors.borderLight}
+                disabled={isLoading || systemNotificationsEnabled === false}
+              />
+            </View>
+
+            <View style={styles.row}>
+              <View style={styles.labelColumn}>
+                <Text style={styles.label}>New sessions & articles</Text>
+                <Text style={styles.labelSub}>
+                  Hear about new sleep sessions, stories, and learn content as it arrives.
+                </Text>
+              </View>
+              <Switch
+                value={prefs.new_content_enabled}
+                onValueChange={(value) => updatePreference('new_content_enabled', value)}
+                trackColor={{ true: Colors.accentDim, false: Colors.borderLight }}
+                thumbColor={prefs.new_content_enabled ? Colors.accent : Colors.surface}
+                ios_backgroundColor={Colors.borderLight}
+                disabled={isLoading || systemNotificationsEnabled === false}
+              />
+            </View>
+          </View>
+        </ScrollView>
+
+        <View
+          style={[
+            styles.logoutContainer,
+            { paddingBottom: Math.max(insets.bottom, 16) },
           ]}
         >
-          <Text style={styles.logoutText}>Log out</Text>
-        </Pressable>
-      </ScrollView>
+          <Pressable
+            onPress={handleSignOut}
+            style={({ pressed }) => [
+              styles.logoutButton,
+              pressed && styles.logoutButtonPressed,
+            ]}
+          >
+            <Text style={styles.logoutText}>Log out</Text>
+          </Pressable>
+        </View>
+      </View>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  inner: {
     flex: 1,
   },
   scroll: {
@@ -358,10 +426,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#402020',
     borderWidth: 1,
     borderColor: '#FFB3B3',
+    gap: 8,
   },
   bannerWarningText: {
     fontSize: 13,
     color: '#FFE5E5',
+  },
+  bannerButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#FFE5E5',
+  },
+  bannerButtonPressed: {
+    opacity: 0.85,
+  },
+  bannerButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3C1A1A',
   },
   section: {
     borderRadius: 18,
@@ -436,9 +520,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#05030F',
   },
+  logoutContainer: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+  },
   logoutButton: {
-    marginTop: 24,
-    alignSelf: 'center',
+    alignSelf: 'stretch',
+    alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 999,
