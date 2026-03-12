@@ -30,7 +30,7 @@ export function ScreenHeader({ title, backLabel = 'Back', onBackPress }: ScreenH
         style={styles.backButton}
         hitSlop={10}
       >
-        <ChevronLeft size={18} color={Colors.text} />
+        <ChevronLeft size={22} color={Colors.text} />
         <Text style={styles.backLabel}>{backLabel}</Text>
       </Pressable>
       <Text style={styles.title}>{title}</Text>
@@ -44,6 +44,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // Match primary content padding (e.g. 3am categories, article body)
     paddingHorizontal: 20,
     marginBottom: 20,
   },
@@ -54,12 +55,12 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   backLabel: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginLeft: 4,
+    fontSize: 16,
+    color: Colors.text,
+    marginLeft: 6,
   },
   title: {
-    fontSize: 17,
+    fontSize: 19,
     fontWeight: '600' as const,
     color: Colors.text,
   },
