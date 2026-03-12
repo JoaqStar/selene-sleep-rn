@@ -346,7 +346,7 @@ export default function ThreadScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <ScreenHeader title="Thread" backLabel="Community" />
+      <ScreenHeader title="Thread" backLabel="Community" containerStyle={styles.header} />
 
       {listData.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -405,6 +405,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  header: {
+    paddingHorizontal: 20,
+  },
   centered: {
     flex: 1,
     alignItems: 'center',
@@ -426,7 +429,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: 20,
   },
   emptyTitle: {
     fontSize: 18,
@@ -440,7 +443,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   messageList: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 12,
     // Extra bottom padding so the last reply isn't hidden
     // behind the input bar at the bottom.
@@ -515,7 +518,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 12,
+    paddingHorizontal: 20,
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: Colors.border,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
@@ -9,9 +9,10 @@ type ScreenHeaderProps = {
   title: string;
   backLabel?: string;
   onBackPress?: () => void;
+  containerStyle?: ViewStyle;
 };
 
-export function ScreenHeader({ title, backLabel = 'Back', onBackPress }: ScreenHeaderProps) {
+export function ScreenHeader({ title, backLabel = 'Back', onBackPress, containerStyle }: ScreenHeaderProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -24,7 +25,7 @@ export function ScreenHeader({ title, backLabel = 'Back', onBackPress }: ScreenH
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, containerStyle, { paddingTop: insets.top }]}>
       <Pressable
         onPress={handleBack}
         style={styles.backButton}
@@ -45,7 +46,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     // Match primary content padding (e.g. 3am categories, article body)
-    paddingHorizontal: 20,
+    paddingHorizontal: 0,
     marginBottom: 20,
   },
   backButton: {
