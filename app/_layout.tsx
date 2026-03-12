@@ -25,6 +25,21 @@ function RootLayoutNav() {
     return unsubscribe;
   }, []);
 
+  const rawMetadata = (session?.user?.user_metadata ?? {}) as Record<string, any>;
+  const remoteName =
+    (typeof rawMetadata.full_name === 'string' && rawMetadata.full_name) ||
+    (typeof rawMetadata.name === 'string' && rawMetadata.name) ||
+    '';
+  const hasRemoteName = remoteName.trim().length > 0;
+
+  useEffect(() => {
+    // If Supabase already has a name for this user, sync it into the onboarding store
+    // so we don't show the onboarding "What should we call you?" screen again.
+    if (session && hasRemoteName && !isOnboarded) {
+      useOnboardingStore.getState().completeOnboarding(remoteName);
+    }
+  }, [session, hasRemoteName, isOnboarded, remoteName]);
+
   useEffect(() => {
     const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as any;
@@ -50,7 +65,7 @@ function RootLayoutNav() {
   return (
     <>
       {!session && <Redirect href="/sign-in" />}
-      {session && !isOnboarded && <Redirect href="/onboarding" />}
+      {session && !isOnboarded && !hasRemoteName && <Redirect href="/onboarding" />}
       <Stack
         screenOptions={{
           headerBackTitle: "Back",
@@ -66,6 +81,12 @@ function RootLayoutNav() {
           options={{ headerShown: false, animation: 'fade' }}
         />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="settings"
+          options={{
+            headerShown: false,
+          }}
+        />
         <Stack.Screen
           name="player"
           options={{

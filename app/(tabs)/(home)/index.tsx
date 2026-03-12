@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Animated, FlatList } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Moon, AlertCircle, ChevronRight, LogOut } from 'lucide-react-native';
+import { Moon, AlertCircle, ChevronRight, Settings } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,7 +18,6 @@ export default function HomeScreen() {
   const router = useRouter();
   const { userName } = useOnboardingStore();
   const { setCurrentSession } = usePlayerStore();
-  const { signOut } = useAuthStore();
   const { data, isLoading } = useSessions();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -48,11 +47,10 @@ export default function HomeScreen() {
     router.push('/(tabs)/(home)/three-am');
   }, [router]);
 
-  const handleSignOut = useCallback(async () => {
+  const handleOpenSettings = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await signOut();
-    router.replace('/sign-in');
-  }, [signOut, router]);
+    router.push('/settings');
+  }, [router]);
 
   const renderCompactSession = useCallback(({ item }: { item: Session }) => (
     <SessionCard session={item} onPress={handleSessionPress} compact />
@@ -71,8 +69,8 @@ export default function HomeScreen() {
         <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
           <View style={styles.moonRow}>
             <Moon size={20} color={Colors.accent} />
-            <Pressable onPress={handleSignOut} hitSlop={12} testID="sign-out-button">
-              <LogOut size={18} color={Colors.textMuted} />
+            <Pressable onPress={handleOpenSettings} hitSlop={12} testID="settings-button">
+              <Settings size={18} color={Colors.textMuted} />
             </Pressable>
           </View>
           <Text style={styles.greeting}>{getGreeting()}, {userName || 'Friend'}</Text>
