@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Animated, FlatList, AppState, AppStateStatus } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Moon, AlertCircle, ChevronRight, Settings } from 'lucide-react-native';
+import { Moon, AlertCircle, ChevronRight, Settings, CloudMoon, BookOpen, Users } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,6 +45,18 @@ export default function HomeScreen() {
 
   const handleThreeAmPress = useCallback(() => {
     router.push('/(tabs)/(home)/three-am');
+  }, [router]);
+
+  const handleGoToSleep = useCallback(() => {
+    router.push('/(tabs)/sleep');
+  }, [router]);
+
+  const handleGoToLearn = useCallback(() => {
+    router.push('/(tabs)/learn');
+  }, [router]);
+
+  const handleGoToCommunity = useCallback(() => {
+    router.push('/(tabs)/community');
   }, [router]);
 
   const handleOpenSettings = useCallback(() => {
@@ -112,7 +124,7 @@ export default function HomeScreen() {
             </Pressable>
           </View>
           <Text style={styles.greeting}>{getGreeting()}, {userName || 'Friend'}</Text>
-          <Text style={styles.headerSubtitle}>What would you like tonight?</Text>
+          <Text style={styles.headerSubtitle}>Your space for better nights.</Text>
         </Animated.View>
 
         <Animated.View style={{ opacity: fadeAnim }}>
@@ -136,15 +148,42 @@ export default function HomeScreen() {
         </Animated.View>
 
         <Animated.View style={{ opacity: fadeAnim }}>
-          <Text style={styles.sectionTitle}>Tonight's Sessions</Text>
-          <Text style={styles.sectionSubtitle}>Drift off with these guided meditations</Text>
+          <Text style={styles.sectionTitle}>Explore Selene</Text>
+          <Text style={styles.sectionSubtitle}>
+            Sessions, stories, and a community that understands your nights.
+          </Text>
+          <View style={styles.quickLinksRow}>
+            <Pressable onPress={handleGoToSleep} style={styles.quickLinkCard}>
+              <View style={styles.quickLinkIcon}>
+                <CloudMoon size={18} color={Colors.accent} />
+              </View>
+              <Text style={styles.quickLinkTitle}>Sleep sessions</Text>
+              <Text style={styles.quickLinkSubtitle}>
+                Guided practices to help you drift off and stay asleep.
+              </Text>
+            </Pressable>
+          </View>
+          <View style={styles.quickLinksRow}>
+            <Pressable onPress={handleGoToLearn} style={styles.quickLinkCard}>
+              <View style={styles.quickLinkIcon}>
+                <BookOpen size={18} color={Colors.accent} />
+              </View>
+              <Text style={styles.quickLinkTitle}>Articles</Text>
+              <Text style={styles.quickLinkSubtitle}>
+                Science-backed stories about hormones, sleep, and your body.
+              </Text>
+            </Pressable>
+            <Pressable onPress={handleGoToCommunity} style={styles.quickLinkCard}>
+              <View style={styles.quickLinkIcon}>
+                <Users size={18} color={Colors.accent} />
+              </View>
+              <Text style={styles.quickLinkTitle}>Community</Text>
+              <Text style={styles.quickLinkSubtitle}>
+                Share what&apos;s going on and feel a little less alone.
+              </Text>
+            </Pressable>
+          </View>
         </Animated.View>
-
-        {tonightSessions.map((session) => (
-          <Animated.View key={session.id} style={{ opacity: fadeAnim }}>
-            <SessionCard session={session} onPress={handleSessionPress} />
-          </Animated.View>
-        ))}
 
         <Animated.View style={{ opacity: fadeAnim }}>
           <Text style={styles.sectionTitle}>Quick Listen</Text>
@@ -238,5 +277,39 @@ const styles = StyleSheet.create({
   horizontalList: {
     marginTop: 4,
     marginBottom: 20,
+  },
+  quickLinksRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  quickLinkCard: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    backgroundColor: Colors.cardBackground,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  quickLinkIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(201, 169, 110, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  quickLinkTitle: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: Colors.text,
+    marginBottom: 4,
+  },
+  quickLinkSubtitle: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    lineHeight: 18,
   },
 });
