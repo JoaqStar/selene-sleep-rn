@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "759701803024",
+    "project_id": "selene-sleep-app",
+    "storage_bucket": "selene-sleep-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:759701803024:android:f08e6667e67a6d2747fa95",
+        "android_client_info": {
+          "package_name": "com.yogawakeup.selene"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "759701803024-nfijhjllrd21e4r387ami1498q2bnsdb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB8h7Mo2krenqJjyNECWGyzeThZcVMNaiY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "759701803024-nfijhjllrd21e4r387ami1498q2bnsdb.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

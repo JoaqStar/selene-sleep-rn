@@ -12,6 +12,7 @@ type PushPayload = {
 
 type UserPushToken = {
   expo_push_token: string;
+  platform?: string;
 };
 
 const EXPO_PUSH_ENDPOINT = 'https://exp.host/--/api/v2/push/send';
@@ -36,7 +37,7 @@ serve(async (req) => {
 
     const { data: tokens, error } = await client
       .from('user_push_tokens')
-      .select('expo_push_token')
+      .select('expo_push_token, platform')
       .eq('user_id', payload.userId)
       .eq('is_active', true);
 
@@ -52,13 +53,27 @@ serve(async (req) => {
       });
     }
 
-    const messages = tokens.map((t: UserPushToken) => ({
-      to: t.expo_push_token,
-      sound: 'default',
-      title: payload.title,
-      body: payload.body,
-      data: payload.data ?? {},
-    }));
+    const messages = tokens.map((t: UserPushToken) => {
+      const message: Record<string, unknown> = {
+        to: t.expo_push_token,
+        sound: 'default',
+        title: payload.title,
+        body: payload.body,
+        data: payload.data ?? {},
+      };
+
+      // Explicit Android channel to ensure user-visible delivery.
+      if (t.platform === 'android') {
+        message.channelId = 'default';
+      }
+
+      return message;
+    });
+
+    console.log('[send-push] Sending to Expo', {
+      userId: payload.userId,
+      tokenCount: tokens.length,
+    });
 
     const expoRes = await fetch(EXPO_PUSH_ENDPOINT, {
       method: 'POST',
@@ -70,6 +85,7 @@ serve(async (req) => {
     });
 
     const expoJson = await expoRes.json();
+    console.log('[send-push] Expo response', JSON.stringify(expoJson));
 
     // TODO: optionally inspect expoJson.data for invalid tokens and prune them.
 

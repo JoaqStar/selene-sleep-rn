@@ -23,6 +23,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "googleServicesFile": "./firebase/google-services.json",
       "package": "com.yogawakeup.selene",
       "versionCode": 2,
       "useNextNotificationsApi": true

@@ -52,7 +52,11 @@ serve(async (req) => {
       .maybeSingle();
 
     if (actorError) {
-      console.error('[notify-like] Failed to load actor profile', actorError);
+      if (actorError.code === 'PGRST205') {
+        console.warn('[notify-like] profiles table missing; using fallback display name');
+      } else {
+        console.error('[notify-like] Failed to load actor profile', actorError);
+      }
     }
 
     const displayName = actor?.full_name || 'Someone';

@@ -36,6 +36,15 @@ export async function getExpoPushToken(): Promise<string | null> {
   }
 
   try {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#C9A96E',
+      });
+    }
+
     const projectId =
       Notifications?.expoConfig?.extra?.eas?.projectId ??
       process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
