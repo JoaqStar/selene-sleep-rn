@@ -107,15 +107,12 @@ export default function SettingsScreen() {
   }, [userName]);
 
   const refreshSystemNotificationPermissions = useCallback(async () => {
-    console.log('[DebugPushSettingsPermission] Refreshing system notification permissions');
     try {
       const settings = await Notifications.getPermissionsAsync();
-      console.log('[DebugPushSettingsPermission] Permissions response:', settings);
       const granted =
         settings.granted ||
         settings.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
       setSystemNotificationsEnabled(granted);
-      console.log('[DebugPushSettingsPermission] Computed granted =', granted);
     } catch (error) {
       console.error('[Settings] Failed to read system notification permissions', error);
       setSystemNotificationsEnabled(null);
@@ -124,7 +121,6 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     // Initial read of OS-level notification permission for the banner and switch enabled state.
-    console.log('[DebugPushSettingsPermission] Running initial permission check');
     refreshSystemNotificationPermissions();
   }, [refreshSystemNotificationPermissions]);
 
@@ -132,7 +128,6 @@ export default function SettingsScreen() {
     useCallback(() => {
       // When returning to this screen (e.g. from system Settings), refresh permission state
       // so the banner and disabled switches update immediately.
-      console.log('[DebugPushSettingsPermission] Screen focused, refreshing permissions');
       refreshSystemNotificationPermissions();
     }, [refreshSystemNotificationPermissions]),
   );
@@ -141,9 +136,7 @@ export default function SettingsScreen() {
     // Also listen for app foreground transitions, since coming back from the OS Settings app
     // may not always trigger a navigation focus event (especially on Android).
     const handleAppStateChange = (nextState: AppStateStatus) => {
-      console.log('[DebugPushSettingsPermission] AppState changed to', nextState);
       if (nextState === 'active') {
-        console.log('[DebugPushSettingsPermission] App became active, refreshing permissions');
         refreshSystemNotificationPermissions();
       }
     };

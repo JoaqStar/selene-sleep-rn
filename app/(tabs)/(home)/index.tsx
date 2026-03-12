@@ -1,14 +1,13 @@
-import React, { useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Animated, FlatList } from 'react-native';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Animated, FlatList, AppState, AppStateStatus } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Moon, AlertCircle, ChevronRight, Settings } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { usePlayerStore } from '@/stores/playerStore';
-import { useAuthStore } from '@/stores/authStore';
 import { useSessions } from '@/lib/hooks/useSessionsQuery';
 import { Session } from '@/types';
 import SessionCard from '@/components/SessionCard';
@@ -21,6 +20,7 @@ export default function HomeScreen() {
   const { data, isLoading } = useSessions();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+  const threeAmShownRef = useRef(false);
 
   const tonightSessions = data ?? [];
 
@@ -51,6 +51,44 @@ export default function HomeScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push('/settings');
   }, [router]);
+
+  const shouldShowThreeAmNow = useCallback(() => {
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const totalMinutes = hours * 60 + minutes;
+    const startMinutes = 1 * 60 + 30; // 1:30am
+    const endMinutes = 5 * 60; // 5:00am
+    return totalMinutes >= startMinutes && totalMinutes <= endMinutes;
+  }, []);
+
+  const maybeAutoOpenThreeAm = useCallback(() => {
+    if (threeAmShownRef.current) {
+      return;
+    }
+    if (shouldShowThreeAmNow()) {
+      threeAmShownRef.current = true;
+      router.push('/(tabs)/(home)/three-am');
+    }
+  }, [router, shouldShowThreeAmNow]);
+
+  useFocusEffect(
+    useCallback(() => {
+      maybeAutoOpenThreeAm();
+    }, [maybeAutoOpenThreeAm]),
+  );
+
+  useEffect(() => {
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (nextState === 'active') {
+        maybeAutoOpenThreeAm();
+      }
+    };
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, [maybeAutoOpenThreeAm]);
 
   const renderCompactSession = useCallback(({ item }: { item: Session }) => (
     <SessionCard session={item} onPress={handleSessionPress} compact />

@@ -20,6 +20,7 @@ function RootLayoutNav() {
   const { session, isLoading: isAuthLoading, initialize } = useAuthStore();
 
   useEffect(() => {
+    console.log('[DebugAppLoadingIssue] RootLayoutNav mount: calling loadOnboardingState and initialize');
     loadOnboardingState();
     const unsubscribe = initialize();
     return unsubscribe;
@@ -54,11 +55,13 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (!isLoading && !isAuthLoading) {
+      console.log('[DebugAppLoadingIssue] Hiding splash screen. isLoading =', isLoading, 'isAuthLoading =', isAuthLoading);
       SplashScreen.hideAsync();
     }
   }, [isLoading, isAuthLoading]);
 
   if (isLoading || isAuthLoading) {
+    console.log('[DebugAppLoadingIssue] Still loading. isLoading =', isLoading, 'isAuthLoading =', isAuthLoading);
     return null;
   }
 
