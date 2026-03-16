@@ -16,7 +16,12 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.yogawakeup.selene",
-      "buildNumber": "6"
+      "buildNumber": "6",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {

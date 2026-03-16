@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { StreamChat } from 'stream-chat';
+import { AppState, AppStateStatus } from 'react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { getStreamToken } from '@/lib/services/streamService';
@@ -12,6 +13,7 @@ export function useStreamChat() {
   const [error, setError] = useState<Error | null>(null);
   const connectingRef = useRef(false);
   const clientRef = useRef<StreamChat | null>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const { session } = useAuthStore();
   const { userName } = useOnboardingStore();
@@ -78,7 +80,32 @@ export function useStreamChat() {
 
     connectWithRetry();
 
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      const wasActive = appStateRef.current === 'active';
+      const isActive = nextState === 'active';
+      appStateRef.current = nextState;
+
+      // Reduce background resource pressure while audio is playing in background.
+      if (wasActive && !isActive && clientRef.current) {
+        const existingClient = clientRef.current;
+        clientRef.current = null;
+        setClient(null);
+        setIsConnected(false);
+        connectingRef.current = false;
+        existingClient.disconnectUser().catch((err) => {
+          console.error('[StreamChat] Background disconnect error:', err);
+        });
+        return;
+      }
+
+      // Reconnect when app becomes active again.
+      if (!wasActive && isActive && !clientRef.current && !connectingRef.current) {
+        connectWithRetry();
+      }
+    });
+
     return () => {
+      appStateSub.remove();
       if (clientRef.current) {
         console.log('[StreamChat] Disconnecting user');
         clientRef.current.disconnectUser().then(() => {
