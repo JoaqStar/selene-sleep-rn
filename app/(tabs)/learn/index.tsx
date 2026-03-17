@@ -2,12 +2,13 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BookOpen } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useArticles } from '@/lib/hooks/useArticlesQuery';
 import { Article } from '@/types';
 import ArticleCard from '@/components/ArticleCard';
+import { supabase } from '@/lib/supabase';
 
 const CATEGORY_FILTERS = [
   { label: 'All', value: null },
@@ -20,7 +21,8 @@ export default function LearnScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [activeCategory, setActiveCategory] = useState<string>('All');
-  const { data, isLoading } = useArticles();
+  const { data, isLoading, error, refetch, isRefetching } = useArticles();
+  const [isRecoveringAuth, setIsRecoveringAuth] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const articles = data ?? [];
@@ -37,6 +39,32 @@ export default function LearnScreen() {
   const handleArticlePress = useCallback((article: Article) => {
     router.push(`/(tabs)/learn/${article.id}`);
   }, [router]);
+
+  const recoverAuthAndRefetch = useCallback(async () => {
+    try {
+      setIsRecoveringAuth(true);
+      if (supabase) {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          await supabase.auth.refreshSession();
+        }
+      }
+      await refetch();
+    } catch (recoveryError) {
+      console.warn('[Learn] Failed to recover auth before article refetch', recoveryError);
+      await refetch();
+    } finally {
+      setIsRecoveringAuth(false);
+    }
+  }, [refetch]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (error) {
+        recoverAuthAndRefetch();
+      }
+    }, [error, recoverAuthAndRefetch]),
+  );
 
   if (isLoading) {
     return (
@@ -95,6 +123,22 @@ export default function LearnScreen() {
         </Animated.View>
 
         <Animated.View style={{ opacity: fadeAnim }}>
+          {Boolean(error) && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>Couldn&apos;t load articles. Check your connection.</Text>
+              <Pressable
+                onPress={recoverAuthAndRefetch}
+                style={({ pressed }) => [
+                  styles.errorRetryButton,
+                  (pressed || isRefetching || isRecoveringAuth) && styles.errorRetryButtonPressed,
+                ]}
+              >
+                <Text style={styles.errorRetryText}>
+                  {(isRefetching || isRecoveringAuth) ? 'Retrying...' : 'Retry'}
+                </Text>
+              </Pressable>
+            </View>
+          )}
           {filteredArticles.map((article) => (
             <ArticleCard key={article.id} article={article} onPress={handleArticlePress} />
           ))}
@@ -173,5 +217,33 @@ const styles = StyleSheet.create({
   },
   categoryPillTextActive: {
     color: Colors.accent,
+  },
+  errorBanner: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.cardBackground,
+    padding: 12,
+    marginBottom: 12,
+    gap: 10,
+  },
+  errorText: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+  },
+  errorRetryButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Colors.accentDim,
+  },
+  errorRetryButtonPressed: {
+    opacity: 0.85,
+  },
+  errorRetryText: {
+    color: Colors.accent,
+    fontSize: 13,
+    fontWeight: '600' as const,
   },
 });

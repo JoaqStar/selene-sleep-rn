@@ -24,7 +24,25 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ isLoading: false });
       return () => {};
     }
+    const supabaseClient = supabase;
     console.log('[DebugAppLoadingIssue] initialize() called');
+    let hasMarkedAuthReady = false;
+    let authReadyTimeout: ReturnType<typeof setTimeout> | null = null;
+    const markAuthReady = () => {
+      if (hasMarkedAuthReady) return;
+      hasMarkedAuthReady = true;
+      if (authReadyTimeout) {
+        clearTimeout(authReadyTimeout);
+        authReadyTimeout = null;
+      }
+      set({ isLoading: false });
+      console.log('[DebugAppLoadingIssue] markAuthReady(): isLoading=false');
+    };
+    // Failsafe: prevent indefinite splash if getSession stalls.
+    authReadyTimeout = setTimeout(() => {
+      console.warn('[DebugAppLoadingIssue] Auth readiness timeout hit; forcing isLoading=false');
+      markAuthReady();
+    }, 8000);
     const handleDeepLink = async (url: string) => {
       console.log('[Auth] Deep link received:', url);
       try {
@@ -40,7 +58,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
         if (accessToken && refreshToken) {
           console.log('[Auth] Setting session from deep link tokens');
-          const { data, error } = await supabase.auth.setSession({
+          const { data, error } = await supabaseClient.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
@@ -54,7 +72,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
         if (code) {
           console.log('[Auth] Exchanging authorization code for session');
-          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          const { data, error } = await supabaseClient.auth.exchangeCodeForSession(code);
           if (error) {
             console.error('[Auth] exchangeCodeForSession error:', error);
           } else {
@@ -80,11 +98,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       handleDeepLink(event.url);
     });
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabaseClient.auth.getSession().then(async ({ data: { session } }) => {
       console.log('[Auth] Initial session:', session ? 'active' : 'none');
       console.log('[Auth] Initial session token:', session?.access_token);
-      console.log('[DebugAppLoadingIssue] getSession resolved, setting auth state and isLoading=false');
-      set({ session, isLoading: false });
+      console.log('[DebugAppLoadingIssue] getSession resolved, setting auth state');
+      set({ session });
+      markAuthReady();
 
       if (session?.user?.id) {
         console.log('[DebugAppLoadingIssue] Session has user, requesting Expo push token');
@@ -103,10 +122,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     }).catch((error) => {
       console.error('[Auth] Failed to get session:', error);
       console.error('[DebugAppLoadingIssue] getSession threw error, setting isLoading=false');
-      set({ isLoading: false });
+      markAuthReady();
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
       async (_event, session) => {
         console.log('[Auth] State changed:', _event, session ? 'active' : 'none');
         console.log('[DebugAppLoadingIssue] onAuthStateChange received event:', _event);
@@ -131,6 +150,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     );
 
     return () => {
+      if (authReadyTimeout) {
+        clearTimeout(authReadyTimeout);
+        authReadyTimeout = null;
+      }
       linkSubscription.remove();
       subscription.unsubscribe();
     };

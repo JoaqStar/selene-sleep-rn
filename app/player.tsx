@@ -1,16 +1,16 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, Animated, ActivityIndicator, Platform, AppState, AppStateStatus,
+  View, Text, StyleSheet, Pressable, Animated, ActivityIndicator, Platform, AppState, AppStateStatus, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { X, Play, Pause, RotateCcw, RotateCw, Moon } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
-import { Asset } from 'expo-asset';
+import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { usePlayerStore } from '@/stores/playerStore';
+import { cacheAudioForSession, getCachedAudioUri } from '@/lib/services/offlineAudioService';
 
 function formatTime(millis: number): string {
   const totalSeconds = Math.floor(millis / 1000);
@@ -18,8 +18,6 @@ function formatTime(millis: number): string {
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
-
-const lockScreenArtworkUrl = Asset.fromModule(require('../assets/images/icon.png')).uri;
 
 export default function PlayerScreen() {
   const router = useRouter();
@@ -29,8 +27,7 @@ export default function PlayerScreen() {
     setIsPlaying, setPosition, setDuration, setIsBuffering, clearSession,
   } = usePlayerStore();
 
-  const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
-  const playerStatusSubRef = useRef<{ remove: () => void } | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
   const loadIdRef = useRef(0);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const isAppActiveRef = useRef(AppState.currentState === 'active');
@@ -102,98 +99,99 @@ export default function PlayerScreen() {
     let mounted = true;
     const loadId = ++loadIdRef.current;
 
-    const cleanupPlayer = () => {
-      playerStatusSubRef.current?.remove();
-      playerStatusSubRef.current = null;
-      if (playerRef.current) {
-        try {
-          playerRef.current.clearLockScreenControls();
-        } catch (e) {
-          console.warn('[DebugPlayerAudio] Error clearing lock screen controls', e);
-        }
-        try {
-          playerRef.current.remove();
-        } catch (e) {
-          console.warn('[DebugPlayerAudio] Error removing player', e);
-        }
-        playerRef.current = null;
+    const cleanupSound = async () => {
+      if (!soundRef.current) return;
+      const sound = soundRef.current;
+      soundRef.current = null;
+      try {
+        await sound.stopAsync();
+      } catch (e) {
+        console.warn('[DebugPlayerAudio] Error stopping sound during cleanup', e);
+      }
+      try {
+        await sound.unloadAsync();
+      } catch (e) {
+        console.warn('[DebugPlayerAudio] Error unloading sound during cleanup', e);
       }
     };
 
     async function loadAudio() {
       if (!currentSession) return;
+      let cachedAudioUri: string | null = null;
       try {
         console.log('[DebugPlayerAudio] Loading audio for:', currentSession.title, 'loadId =', loadId);
-        await setAudioModeAsync({
-          playsInSilentMode: true,
-          shouldPlayInBackground: true,
-          interruptionMode: 'doNotMix',
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          shouldDuckAndroid: true,
         });
 
-        // Clean up any previous player before starting another.
-        cleanupPlayer();
+        await cleanupSound();
 
-        const newPlayer = createAudioPlayer(
-          { uri: currentSession.audio_url },
-          { updateInterval: 1000 },
-        );
-        playerRef.current = newPlayer;
+        cachedAudioUri = await getCachedAudioUri(currentSession.id);
+        const playbackUri = cachedAudioUri ?? currentSession.audio_url;
+        if (cachedAudioUri) {
+          console.log('[offlineAudio] Playing cached audio for session', currentSession.id);
+        }
 
-        const teacherName = ((currentSession as any).teacher_name || currentSession.instructor || '').trim();
-        const artist = teacherName ? `By ${teacherName}` : 'Selene';
+        const { sound: newSound } = await Audio.Sound.createAsync(
+          { uri: playbackUri },
+          { shouldPlay: true, progressUpdateIntervalMillis: 1000 },
+          (status) => {
+            if (!mounted || loadId !== loadIdRef.current) return;
+            if (!status.isLoaded) return;
 
-        newPlayer.setActiveForLockScreen(
-          true,
-          {
-            title: currentSession.title,
-            artist,
-            artworkUrl: lockScreenArtworkUrl,
+            if (isAppActiveRef.current) {
+              setPosition(status.positionMillis);
+              if (status.durationMillis) {
+                setDuration(status.durationMillis);
+              }
+            }
+            setIsPlaying(status.isPlaying);
+            setIsBuffering(status.isBuffering);
+            if (status.didJustFinish) {
+              setIsPlaying(false);
+              setPosition(0);
+            }
           },
-          {
-            showSeekBackward: true,
-            showSeekForward: true,
-          },
         );
-
-        playerStatusSubRef.current = newPlayer.addListener('playbackStatusUpdate', (status) => {
-          // Ignore callbacks for stale loads or unmounted component
-          if (!mounted || loadId !== loadIdRef.current || !status.isLoaded) {
-            return;
-          }
-
-          // In background, avoid high-frequency UI state updates to reduce pressure.
-          if (isAppActiveRef.current) {
-            setPosition(Math.max(0, Math.floor(status.currentTime * 1000)));
-            setDuration(Math.max(0, Math.floor(status.duration * 1000)));
-          }
-
-          setIsPlaying(status.playing);
-          setIsBuffering(status.isBuffering);
-
-          if (status.didJustFinish) {
-            console.log('[DebugPlayerAudio] Playback finished for', currentSession.title);
-            setIsPlaying(false);
-            setPosition(0);
-          }
-        });
 
         if (!mounted || loadId !== loadIdRef.current) {
-          console.log('[DebugPlayerAudio] Load completed but is stale, cleaning player', {
+          console.log('[DebugPlayerAudio] Load completed but is stale, unloading sound', {
             loadId,
             currentLoadId: loadIdRef.current,
           });
-          cleanupPlayer();
+          try {
+            await newSound.stopAsync();
+          } catch {}
+          try {
+            await newSound.unloadAsync();
+          } catch {}
           return;
         }
 
-        newPlayer.play();
+        soundRef.current = newSound;
         setIsPlaying(true);
         setIsBuffering(false);
         console.log('[DebugPlayerAudio] Audio loaded and playing, loadId =', loadId);
-      } catch (error) {
+
+        // Cache audio for future offline playback after the first successful play.
+        if (!cachedAudioUri) {
+          cacheAudioForSession(currentSession.id, currentSession.audio_url);
+        }
+      } catch (error: any) {
         console.error('[DebugPlayerAudio] Error loading audio:', error);
         if (mounted) {
           setIsBuffering(false);
+          setIsPlaying(false);
+          if (!cachedAudioUri) {
+            Alert.alert(
+              'Unable to play session',
+              'This session is not downloaded yet. Connect to the internet once to stream and cache it for offline playback.',
+            );
+          } else {
+            Alert.alert('Unable to play session', 'Please try again.');
+          }
         }
       }
     }
@@ -214,29 +212,19 @@ export default function PlayerScreen() {
       pulseLoopRef.current = null;
       // Invalidate any pending loads so callbacks ignore stale events.
       loadIdRef.current += 1;
-      playerStatusSubRef.current?.remove();
-      playerStatusSubRef.current = null;
-      if (playerRef.current) {
-        const player = playerRef.current;
-        playerRef.current = null;
-        console.log('[DebugPlayerAudio] Unmounting player, removing player instance');
-        try {
-          player.clearLockScreenControls();
-        } catch (e) {
-          console.warn('[DebugPlayerAudio] Error clearing lock screen controls on unmount', e);
-        }
-        try {
-          player.remove();
-        } catch (e) {
-          console.warn('[DebugPlayerAudio] Error removing player on unmount', e);
-        }
+      if (soundRef.current) {
+        const sound = soundRef.current;
+        soundRef.current = null;
+        console.log('[DebugPlayerAudio] Unmounting player, stopping/unloading sound');
+        sound.stopAsync().catch(() => {});
+        sound.unloadAsync().catch(() => {});
       }
     };
   }, []);
 
   const handlePlayPause = useCallback(async () => {
-    const player = playerRef.current;
-    if (!player) return;
+    const sound = soundRef.current;
+    if (!sound) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Animated.sequence([
       Animated.spring(playButtonScale, { toValue: 0.9, useNativeDriver: true }),
@@ -245,37 +233,40 @@ export default function PlayerScreen() {
 
     if (isPlaying) {
       console.log('[DebugPlayerAudio] Pausing playback');
-      player.pause();
+      await sound.pauseAsync();
     } else {
       console.log('[DebugPlayerAudio] Resuming/starting playback');
-      player.play();
+      await sound.playAsync();
     }
   }, [isPlaying, playButtonScale]);
 
   const handleSeek = useCallback(async (offsetMs: number) => {
-    const player = playerRef.current;
-    if (!player) return;
+    const sound = soundRef.current;
+    if (!sound) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const duration = durationMillis > 0 ? durationMillis : Number.MAX_SAFE_INTEGER;
-    const newPosition = Math.max(0, Math.min(positionMillis + offsetMs, duration));
-    await player.seekTo(newPosition / 1000);
+    const newPosition = Math.max(0, Math.min(positionMillis + offsetMs, durationMillis));
+    await sound.setPositionAsync(newPosition);
   }, [positionMillis, durationMillis]);
 
   const handleClose = useCallback(async () => {
     console.log('[DebugPlayerAudio] handleClose called');
     // Invalidate any in-flight load so that when it completes, it immediately unloads.
     loadIdRef.current += 1;
-    playerStatusSubRef.current?.remove();
-    playerStatusSubRef.current = null;
-    if (playerRef.current) {
+    if (soundRef.current) {
+      const sound = soundRef.current;
+      soundRef.current = null;
       try {
-        console.log('[DebugPlayerAudio] Removing player on close');
-        playerRef.current.clearLockScreenControls();
-        playerRef.current.remove();
+        console.log('[DebugPlayerAudio] Stopping sound on close');
+        await sound.stopAsync();
       } catch (e) {
-        console.warn('[DebugPlayerAudio] Error removing player on close', e);
+        console.warn('[DebugPlayerAudio] Error stopping sound on close', e);
       }
-      playerRef.current = null;
+      try {
+        console.log('[DebugPlayerAudio] Unloading sound on close');
+        await sound.unloadAsync();
+      } catch (e) {
+        console.warn('[DebugPlayerAudio] Error unloading sound on close', e);
+      }
     }
     console.log('[DebugPlayerAudio] Clearing session and navigating back');
     clearSession();

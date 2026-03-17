@@ -1,13 +1,34 @@
 import { supabase, hasSupabaseConfig } from '@/lib/supabase';
 import { Session } from '@/types';
 import { SESSIONS } from '@/mocks/sessions';
+import { loadCachedSessions, saveCachedSessions } from '@/lib/services/offlineContentService';
+
+const QUERY_TIMEOUT_MS = 6000;
+
+async function withTimeout<T>(task: (signal: AbortSignal) => Promise<T>, label: string): Promise<T> {
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`[sessionService] ${label} timed out after ${QUERY_TIMEOUT_MS}ms`));
+    }, QUERY_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([task(controller.signal), timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
 
 export async function getSessions(): Promise<Session[]> {
   console.log('[sessionService] getSessions called');
 
   if (!hasSupabaseConfig || !supabase) {
     console.log('[sessionService] Supabase not configured — using mock sessions');
-    return SESSIONS.map((s, index) => ({
+    const mapped = SESSIONS.map((s, index) => ({
       id: index + 1,
       title: s.title,
       description: s.description ?? '',
@@ -20,22 +41,46 @@ export async function getSessions(): Promise<Session[]> {
       instructor: s.instructor,
       teacher_name: s.instructor,
     }));
+    await saveCachedSessions(mapped);
+    return mapped;
   }
 
-  const { data, error, status, statusText } = await supabase
-    .from('sessions')
-    .select('*')
-    .eq('is_published', true)
-    .order('sort_order', { ascending: true });
+  let data, error, status, statusText;
+  try {
+    ({ data, error, status, statusText } = await withTimeout(
+      (signal) =>
+        supabase
+          .from('sessions')
+          .select('*')
+          .eq('is_published', true)
+          .order('sort_order', { ascending: true })
+          .abortSignal(signal),
+      'getSessions',
+    ));
+  } catch (requestError) {
+    console.error('[sessionService] getSessions request failed:', requestError);
+    const cached = await loadCachedSessions();
+    if (cached && cached.length > 0) {
+      console.log('[sessionService] Returning cached sessions after request failure:', cached.length);
+      return cached;
+    }
+    throw requestError;
+  }
 
   console.log('[sessionService] getSessions response — status:', status, statusText, 'data:', data?.length, 'error:', error);
 
   if (error) {
     console.error('[sessionService] Error fetching sessions:', JSON.stringify(error));
+    const cached = await loadCachedSessions();
+    if (cached && cached.length > 0) {
+      console.log('[sessionService] Returning cached sessions after API error:', cached.length);
+      return cached;
+    }
     throw error;
   }
-
-  return data as Session[];
+  const sessions = data as Session[];
+  await saveCachedSessions(sessions);
+  return sessions;
 }
 
 export async function getSessionById(id: number): Promise<Session> {
@@ -49,12 +94,23 @@ export async function getSessionById(id: number): Promise<Session> {
     return match;
   }
 
-  const { data, error } = await supabase
-    .from('sessions')
-    .select('*')
-    .eq('id', id)
-    .eq('is_published', true)
-    .single();
+  let data, error;
+  try {
+    ({ data, error } = await withTimeout(
+      (signal) =>
+        supabase
+          .from('sessions')
+          .select('*')
+          .eq('id', id)
+          .eq('is_published', true)
+          .single()
+          .abortSignal(signal),
+      'getSessionById',
+    ));
+  } catch (requestError) {
+    console.error('[sessionService] getSessionById request failed:', requestError);
+    throw requestError;
+  }
 
   if (error) {
     console.error('Error fetching session by id:', id, error);
@@ -74,17 +130,36 @@ export async function getSessionsByMoodTag(moodTag: string): Promise<Session[]> 
     return all.filter((s) => s.mood_tag === moodTag);
   }
 
-  const { data, error, status, statusText } = await supabase
-    .from('sessions')
-    .select('*')
-    .eq('is_published', true)
-    .eq('mood_tag', moodTag)
-    .order('sort_order', { ascending: true });
+  let data, error, status, statusText;
+  try {
+    ({ data, error, status, statusText } = await withTimeout(
+      (signal) =>
+        supabase
+          .from('sessions')
+          .select('*')
+          .eq('is_published', true)
+          .eq('mood_tag', moodTag)
+          .order('sort_order', { ascending: true })
+          .abortSignal(signal),
+      'getSessionsByMoodTag',
+    ));
+  } catch (requestError) {
+    console.error('[sessionService] getSessionsByMoodTag request failed:', requestError);
+    const cached = await loadCachedSessions();
+    if (cached && cached.length > 0) {
+      return cached.filter((s) => s.mood_tag === moodTag);
+    }
+    throw requestError;
+  }
 
   console.log('[sessionService] getSessionsByMoodTag response — status:', status, statusText, 'data:', data?.length, 'error:', error);
 
   if (error) {
     console.error('[sessionService] Error fetching sessions by mood tag:', moodTag, JSON.stringify(error));
+    const cached = await loadCachedSessions();
+    if (cached && cached.length > 0) {
+      return cached.filter((s) => s.mood_tag === moodTag);
+    }
     throw error;
   }
 

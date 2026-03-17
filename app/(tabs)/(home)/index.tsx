@@ -17,7 +17,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { userName } = useOnboardingStore();
   const { setCurrentSession } = usePlayerStore();
-  const { data, isLoading } = useSessions();
+  const { data, isLoading, error, refetch, isRefetching } = useSessions();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
   const threeAmShownRef = useRef(false);
@@ -106,6 +106,8 @@ export default function HomeScreen() {
     <SessionCard session={item} onPress={handleSessionPress} compact />
   ), [handleSessionPress]);
 
+  const hasLoadError = Boolean(error);
+
   return (
     <LinearGradient
       colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
@@ -187,6 +189,22 @@ export default function HomeScreen() {
 
         <Animated.View style={{ opacity: fadeAnim }}>
           <Text style={styles.sectionTitle}>Quick Listen</Text>
+          {hasLoadError && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>Couldn&apos;t load sessions. Check your connection.</Text>
+              <Pressable
+                onPress={() => refetch()}
+                style={({ pressed }) => [
+                  styles.errorRetryButton,
+                  (pressed || isRefetching) && styles.errorRetryButtonPressed,
+                ]}
+              >
+                <Text style={styles.errorRetryText}>
+                  {isRefetching ? 'Retrying...' : 'Retry'}
+                </Text>
+              </Pressable>
+            </View>
+          )}
           <FlatList
             data={tonightSessions}
             renderItem={renderCompactSession}
@@ -311,5 +329,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textSecondary,
     lineHeight: 18,
+  },
+  errorBanner: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.cardBackground,
+    padding: 12,
+    marginBottom: 12,
+    gap: 10,
+  },
+  errorText: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+  },
+  errorRetryButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Colors.accentDim,
+  },
+  errorRetryButtonPressed: {
+    opacity: 0.85,
+  },
+  errorRetryText: {
+    color: Colors.accent,
+    fontSize: 13,
+    fontWeight: '600' as const,
   },
 });

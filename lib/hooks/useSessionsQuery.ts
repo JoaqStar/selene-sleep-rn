@@ -10,6 +10,9 @@ export function useSessions() {
     queryKey: ['sessions', userKey],
     queryFn: getSessions,
     staleTime: 5 * 60 * 1000,
+    enabled: Boolean(session?.user?.id),
+    retry: false,
+    refetchOnMount: 'always',
   });
 }
 
@@ -21,5 +24,8 @@ export function useSessionsByMoodTag(moodTag: string) {
     queryKey: ['sessions', 'mood', moodTag, userKey],
     queryFn: () => getSessionsByMoodTag(moodTag),
     staleTime: 5 * 60 * 1000,
+    enabled: Boolean(session?.user?.id),
+    retry: false,
+    refetchOnMount: 'always',
   });
 }
