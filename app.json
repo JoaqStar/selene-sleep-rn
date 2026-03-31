@@ -4,14 +4,14 @@
     "slug": "selene-sleep-app",
     "version": "0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/selene_logo_moon.png",
     "scheme": "selenesleepapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "splash": {
-      "image": "./assets/images/selene_splash_1024.png",
+      "image": "./assets/images/selene_splash_moon.png",
       "resizeMode": "cover",
-      "backgroundColor": "#050017"
+      "backgroundColor": "#0D0014"
     },
     "ios": {
       "supportsTablet": false,
@@ -25,7 +25,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/selene_logo_moon.png",
         "backgroundColor": "#ffffff"
       },
       "googleServicesFile": "./firebase/google-services.json",
