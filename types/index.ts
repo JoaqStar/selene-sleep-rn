@@ -12,6 +12,15 @@ export interface Session {
   teacher_name?: string;
 }
 
+export type ArticleStatus = 'draft' | 'published' | 'archived' | string;
+
+export interface ArticleSource {
+  title: string;
+  publication: string;
+  date: string;
+  url: string;
+}
+
 export interface Article {
   id: number;
   title: string;
@@ -20,7 +29,10 @@ export interface Article {
   category: string;
   author: string;
   related_session_id: number | null;
-  is_published: boolean;
+  status: ArticleStatus;
+  image_url?: string | null;
+  sources?: ArticleSource[] | null;
+  created_at?: string;
   readTime?: string;
 }
 

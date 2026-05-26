@@ -1,8 +1,9 @@
 import React, { useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated, Image } from 'react-native';
 import { BookOpen, Clock, ChevronRight } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { Article } from '@/types';
+import { isSeleneAuthor } from '@/lib/utils/articleAuthor';
 
 interface ArticleCardProps {
   article: Article;
@@ -24,6 +25,9 @@ export default React.memo(function ArticleCard({ article, onPress }: ArticleCard
     onPress(article);
   }, [onPress, article]);
 
+  const imageUrl = article.image_url?.trim();
+  const seleneAuthor = isSeleneAuthor(article.author);
+
   return (
     <Animated.View style={[{ transform: [{ scale: scaleAnim }] }]}>
       <Pressable
@@ -33,6 +37,9 @@ export default React.memo(function ArticleCard({ article, onPress }: ArticleCard
         testID={`article-card-${article.id}`}
       >
         <View style={styles.card}>
+          {imageUrl ? (
+            <Image source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
+          ) : null}
           <View style={styles.topRow}>
             <View style={styles.categoryBadge}>
               <BookOpen size={11} color={Colors.accent} />
@@ -46,7 +53,7 @@ export default React.memo(function ArticleCard({ article, onPress }: ArticleCard
           <Text style={styles.title} numberOfLines={2}>{article.title}</Text>
           <Text style={styles.standfirst} numberOfLines={2}>{article.standfirst}</Text>
           <View style={styles.bottomRow}>
-            <Text style={styles.voice}>{article.author}</Text>
+            <Text style={[styles.voice, seleneAuthor && styles.voiceSelene]}>{article.author}</Text>
             <ChevronRight size={16} color={Colors.textMuted} />
           </View>
         </View>
@@ -63,6 +70,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: Colors.border,
+    overflow: 'hidden',
+  },
+  heroImage: {
+    width: '100%',
+    height: 140,
+    borderRadius: 10,
+    marginBottom: 12,
   },
   topRow: {
     flexDirection: 'row',
@@ -116,5 +130,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
     fontStyle: 'italic' as const,
+  },
+  voiceSelene: {
+    color: Colors.accent,
+    fontStyle: 'normal' as const,
+    fontWeight: '600' as const,
   },
 });

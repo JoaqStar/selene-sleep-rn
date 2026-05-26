@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { Article } from '@/types';
 import { loadCachedArticles, saveCachedArticles } from '@/lib/services/offlineContentService';
+import { sortArticlesNewestFirst } from '@/lib/utils/sortArticles';
 
 const QUERY_TIMEOUT_MS = 6000;
 
@@ -34,7 +35,8 @@ export async function getArticles(): Promise<Article[]> {
         supabase
           .from('articles')
           .select('*')
-          .eq('is_published', true)
+          .eq('status', 'published')
+          .order('created_at', { ascending: false })
           .abortSignal(signal),
       'getArticles',
     ));
@@ -43,7 +45,7 @@ export async function getArticles(): Promise<Article[]> {
     const cached = await loadCachedArticles();
     if (cached && cached.length > 0) {
       console.log('[articleService] Returning cached articles after request failure:', cached.length);
-      return cached;
+      return sortArticlesNewestFirst(cached);
     }
     throw requestError;
   }
@@ -55,11 +57,11 @@ export async function getArticles(): Promise<Article[]> {
     const cached = await loadCachedArticles();
     if (cached && cached.length > 0) {
       console.log('[articleService] Returning cached articles after API error:', cached.length);
-      return cached;
+      return sortArticlesNewestFirst(cached);
     }
     throw error;
   }
-  const articles = data as Article[];
+  const articles = sortArticlesNewestFirst(data as Article[]);
   await saveCachedArticles(articles);
   return articles;
 }
@@ -76,7 +78,7 @@ export async function getArticleById(id: number): Promise<Article> {
           .from('articles')
           .select('*')
           .eq('id', id)
-          .eq('is_published', true)
+          .eq('status', 'published')
           .single()
           .abortSignal(signal),
       'getArticleById',

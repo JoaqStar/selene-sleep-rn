@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Clock, Play, BookOpen } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -8,6 +8,9 @@ import { useArticles } from '@/lib/hooks/useArticlesQuery';
 import { useSessions } from '@/lib/hooks/useSessionsQuery';
 import { usePlayerStore } from '@/stores/playerStore';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { isSeleneAuthor } from '@/lib/utils/articleAuthor';
+import { formatSourceMeta, parseArticleSources } from '@/lib/utils/articleSources';
+import { openInAppBrowser } from '@/lib/utils/inAppBrowser';
 
 export default function ArticleDetailScreen() {
   const { articleId } = useLocalSearchParams<{ articleId: string }>();
@@ -30,6 +33,14 @@ export default function ArticleDetailScreen() {
     }
   }, [relatedSession, setCurrentSession, router]);
 
+  const handleOpenSource = useCallback(async (url: string) => {
+    try {
+      await openInAppBrowser(url);
+    } catch (error) {
+      console.warn('[Article] Failed to open source URL:', error);
+    }
+  }, []);
+
   if (!article) {
     return (
       <View style={styles.errorContainer}>
@@ -39,6 +50,9 @@ export default function ArticleDetailScreen() {
   }
 
   const paragraphs = article.body.split('\n\n');
+  const imageUrl = article.image_url?.trim();
+  const articleSources = parseArticleSources(article.sources);
+  const seleneAuthor = isSeleneAuthor(article.author);
 
   return (
     <LinearGradient
@@ -66,15 +80,50 @@ export default function ArticleDetailScreen() {
         <Text style={styles.title}>{article.title}</Text>
         <Text style={styles.standfirst}>{article.standfirst}</Text>
 
-        <View style={styles.voiceBadge}>
-          <Text style={styles.voiceText}>{article.author}</Text>
+        <View style={[styles.voiceBadge, seleneAuthor && styles.voiceBadgeSelene]}>
+          <Text style={[styles.voiceText, seleneAuthor && styles.voiceTextSelene]}>
+            {article.author}
+          </Text>
         </View>
+
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
+        ) : null}
 
         <View style={styles.divider} />
 
         {paragraphs.map((para, idx) => (
           <Text key={idx} style={styles.bodyText}>{para}</Text>
         ))}
+
+        {articleSources.length > 0 ? (
+          <View style={styles.sourcesSection}>
+            <Text style={styles.sourcesLabel}>Reference links</Text>
+            {articleSources.map((source, idx) => {
+              const meta = formatSourceMeta(source);
+              return (
+                <Pressable
+                  key={`${source.url}-${idx}`}
+                  onPress={() => handleOpenSource(source.url)}
+                  style={({ pressed }) => [
+                    styles.sourceItem,
+                    pressed && styles.sourceItemPressed,
+                  ]}
+                  accessibilityRole="link"
+                  accessibilityLabel={source.title || 'Read the original article'}
+                >
+                  <View style={styles.sourceTitleRow}>
+                    <Text style={styles.sourceEmoji}>📰</Text>
+                    <Text style={styles.sourceTitle}>
+                      {source.title || 'Read the original'}
+                    </Text>
+                  </View>
+                  {meta ? <Text style={styles.sourceMeta}>{meta}</Text> : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
 
         {relatedSession ? (
           <View style={styles.relatedSection}>
@@ -173,9 +222,25 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 16,
   },
+  voiceBadgeSelene: {
+    backgroundColor: Colors.accentDim,
+    borderWidth: 1,
+    borderColor: 'rgba(201, 169, 110, 0.35)',
+  },
   voiceText: {
     fontSize: 12,
     color: Colors.textSecondary,
+  },
+  voiceTextSelene: {
+    color: Colors.accent,
+    fontWeight: '600' as const,
+  },
+  heroImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 14,
+    marginBottom: 20,
+    backgroundColor: Colors.surface,
   },
   divider: {
     height: 1,
@@ -188,6 +253,51 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     marginBottom: 18,
     letterSpacing: 0.2,
+  },
+  sourcesSection: {
+    marginTop: 4,
+    marginBottom: 20,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  sourcesLabel: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    letterSpacing: 0.7,
+    textTransform: 'uppercase' as const,
+    marginBottom: 10,
+  },
+  sourceItem: {
+    marginBottom: 14,
+    paddingVertical: 2,
+  },
+  sourceItemPressed: {
+    opacity: 0.7,
+  },
+  sourceTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  sourceEmoji: {
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  sourceTitle: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    lineHeight: 20,
+    textDecorationLine: 'underline',
+    textDecorationColor: 'rgba(154, 150, 166, 0.5)',
+  },
+  sourceMeta: {
+    marginTop: 2,
+    marginLeft: 22,
+    fontSize: 11,
+    color: Colors.textMuted,
+    lineHeight: 16,
   },
   relatedSection: {
     marginTop: 12,
