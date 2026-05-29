@@ -72,8 +72,6 @@ export default function CommunityScreen() {
   const [isClassifying, setIsClassifying] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
-  const [editingCustomTagInput, setEditingCustomTagInput] = useState('');
-  const [isUpdatingTag, setIsUpdatingTag] = useState(false);
   const messagesRef = useRef<StreamFeedMessage[]>([]);
 
   useEffect(() => {
@@ -353,6 +351,7 @@ export default function CommunityScreen() {
     setAutoSuggestedTags(null);
     setIsClassifying(false);
     setIsSending(false);
+    setEditingPostId(null);
   }, []);
 
   const closeComposer = useCallback(() => {
@@ -375,19 +374,57 @@ export default function CommunityScreen() {
 
     setIsSending(true);
     try {
-      await channel.sendMessage({
-        text,
-        tag: resolvedTags[0],
-        tags: resolvedTags,
-      });
-      if (hasSupabaseConfig && supabase) {
-        updateTagStats(resolvedTags, []).catch((tagStatsErr) => {
-          console.warn('[CommunityScreen] Failed to update tag stats after post', tagStatsErr);
+      if (editingPostId) {
+        const previousMessage = messages.find((message) => message.id === editingPostId);
+        if (!previousMessage) {
+          closeComposer();
+          return;
+        }
+
+        setMessages((prev) => prev.map((message) => (
+          message.id === editingPostId
+            ? { ...message, text, tag: resolvedTags[0], tags: resolvedTags }
+            : message
+        )));
+
+        if (typeof client?.updateMessage === 'function') {
+          await client.updateMessage({
+            id: editingPostId,
+            text,
+            tag: resolvedTags[0],
+            tags: resolvedTags,
+          } as any);
+        }
+
+        const { added, removed } = computeTagDiff(previousMessage.tags, resolvedTags);
+        if ((added.length > 0 || removed.length > 0) && hasSupabaseConfig && supabase) {
+          updateTagStats(added, removed).catch((tagStatsErr) => {
+            console.warn('[CommunityScreen] Failed to update tag stats after edit', tagStatsErr);
+          });
+        }
+      } else {
+        await channel.sendMessage({
+          text,
+          tag: resolvedTags[0],
+          tags: resolvedTags,
         });
+        if (hasSupabaseConfig && supabase) {
+          updateTagStats(resolvedTags, []).catch((tagStatsErr) => {
+            console.warn('[CommunityScreen] Failed to update tag stats after post', tagStatsErr);
+          });
+        }
       }
       closeComposer();
     } catch (sendErr) {
-      console.error('[CommunityScreen] Failed to send post', sendErr);
+      console.error('[CommunityScreen] Failed to save post', sendErr);
+      if (editingPostId) {
+        const previousMessage = messages.find((message) => message.id === editingPostId);
+        if (previousMessage) {
+          setMessages((prev) => prev.map((message) => (
+            message.id === editingPostId ? previousMessage : message
+          )));
+        }
+      }
     } finally {
       setIsSending(false);
     }
@@ -396,9 +433,11 @@ export default function CommunityScreen() {
     closeComposer,
     composerResolvedManualTags,
     composerText,
+    editingPostId,
     handleRunAutoTag,
     isComposerAutoSelected,
     isSending,
+    messages,
   ]);
 
   const handleSelectComposerAuto = useCallback(() => {
@@ -433,68 +472,32 @@ export default function CommunityScreen() {
     handleToggleComposerPresetTag(option);
   }, [handleSelectComposerAuto, handleToggleComposerPresetTag]);
 
-  const handleUpdateTags = useCallback(async (postId: string, nextTagsInput: string[] | string) => {
-    if (!client || isUpdatingTag) return;
-    const candidateTags = Array.isArray(nextTagsInput)
-      ? nextTagsInput
-      : parseTagListInput(nextTagsInput);
-    const normalizedNextTags = mergeAndDedupeTags(candidateTags);
-    if (normalizedNextTags.length === 0) return;
-    const previousMessage = messages.find((message) => message.id === postId);
-    if (!previousMessage || areTagArraysEqual(previousMessage.tags, normalizedNextTags)) {
-      setEditingPostId(null);
-      setEditingCustomTagInput('');
-      return;
-    }
+  const openComposerForEdit = useCallback((item: StreamFeedMessage) => {
+    const presetOptionsMap = new Map(composerTopTagOptions.map((option) => [option.toLowerCase(), option]));
+    const presetTags: string[] = [];
+    const customTags: string[] = [];
 
-    setIsUpdatingTag(true);
-    setMessages((prev) => prev.map((message) => (
-      message.id === postId
-        ? { ...message, tag: normalizedNextTags[0], tags: normalizedNextTags }
-        : message
-    )));
+    item.tags.forEach((tag) => {
+      const preset = presetOptionsMap.get(tag.toLowerCase());
+      if (preset) {
+        if (!presetTags.includes(preset)) presetTags.push(preset);
+      } else {
+        customTags.push(tag);
+      }
+    });
 
-    try {
-      if (typeof client.updateMessage === 'function') {
-        console.log('[DebugCommunity] updateMessage payload', {
-          id: postId,
-          textLength: previousMessage.text.length,
-          nextTags: normalizedNextTags,
-        });
-        await client.updateMessage({
-          id: postId,
-          // Preserve original body text when updating tags.
-          // Stream updateMessage behaves like a full update for message fields.
-          text: previousMessage.text,
-          tag: normalizedNextTags[0],
-          tags: normalizedNextTags,
-        } as any);
-        console.log('[DebugCommunity] updateMessage success', {
-          id: postId,
-          textLength: previousMessage.text.length,
-        });
-      }
-      const { added, removed } = computeTagDiff(previousMessage.tags, normalizedNextTags);
-      if ((added.length > 0 || removed.length > 0) && hasSupabaseConfig && supabase) {
-        updateTagStats(added, removed).catch((tagStatsErr) => {
-          console.warn('[CommunityScreen] Failed to update tag stats after edit', tagStatsErr);
-        });
-      }
-      setEditingPostId(null);
-      setEditingCustomTagInput('');
-    } catch (updateErr) {
-      console.error('[CommunityScreen] Failed to update post tag', updateErr);
-      setMessages((prev) => prev.map((message) => (
-        message.id === postId
-          ? { ...message, tag: previousMessage.tag, tags: previousMessage.tags }
-          : message
-      )));
-    } finally {
-      setIsUpdatingTag(false);
-    }
-  }, [client, isUpdatingTag, messages]);
+    setEditingPostId(item.id);
+    setIsComposerOpen(true);
+    setComposerText(item.text);
+    setIsComposerAutoSelected(false);
+    setAutoSuggestedTags(null);
+    setComposerSelectedPresetTags(presetTags);
+    setCustomTagInput(customTags.join(', '));
+  }, [composerTopTagOptions]);
 
   const renderPostCard = useCallback(({ item }: { item: StreamFeedMessage }) => {
+    const currentUserId = session?.user?.id;
+    const isOwnPost = item.user?.id === currentUserId;
     const likeCount = item.reaction_counts?.like ?? 0;
     const hasLiked = item.own_reactions?.some((reaction) => reaction.type === 'like') ?? false;
     return (
@@ -512,16 +515,15 @@ export default function CommunityScreen() {
                 </View>
               ))}
             </View>
-            <Pressable
-              onPress={() => {
-                setEditingPostId(item.id);
-                setEditingCustomTagInput(item.tags.join(', '));
-              }}
-              style={styles.iconAction}
-              hitSlop={8}
-            >
-              <Pencil size={14} color={Colors.textMuted} />
-            </Pressable>
+            {isOwnPost && (
+              <Pressable
+                onPress={() => openComposerForEdit(item)}
+                style={styles.iconAction}
+                hitSlop={8}
+              >
+                <Pencil size={14} color={Colors.textMuted} />
+              </Pressable>
+            )}
           </View>
         </View>
 
@@ -547,7 +549,7 @@ export default function CommunityScreen() {
         </View>
       </View>
     );
-  }, [handleLikeToggle, handleOpenThread]);
+  }, [handleLikeToggle, handleOpenThread, openComposerForEdit, session?.user?.id]);
 
   if (error) {
     return (
@@ -671,7 +673,7 @@ export default function CommunityScreen() {
           >
             <View style={styles.modalSheet}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>New Post</Text>
+                <Text style={styles.modalTitle}>{editingPostId ? 'Edit Post' : 'New Post'}</Text>
                 <Pressable onPress={closeComposer} hitSlop={8}>
                   <X size={20} color={Colors.textSecondary} />
                 </Pressable>
@@ -728,67 +730,12 @@ export default function CommunityScreen() {
                 >
                   {isSending
                     ? <ActivityIndicator size="small" color={Colors.background} />
-                    : <Text style={styles.modalSubmitText}>Post</Text>}
+                    : <Text style={styles.modalSubmitText}>{editingPostId ? 'Save' : 'Post'}</Text>}
                 </Pressable>
               </View>
             </View>
           </KeyboardAvoidingView>
         </View>
-      </Modal>
-
-      <Modal
-        visible={editingPostId !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setEditingPostId(null);
-          setEditingCustomTagInput('');
-        }}
-      >
-        <Pressable
-          style={styles.editModalOverlay}
-          onPress={() => {
-            setEditingPostId(null);
-            setEditingCustomTagInput('');
-          }}
-        >
-          <View style={styles.editModalCard}>
-            <Text style={styles.editModalTitle}>Update Tag</Text>
-            <TextInput
-              style={styles.editCustomTagInput}
-              placeholder="Create or edit tag..."
-              placeholderTextColor={Colors.textMuted}
-              value={editingCustomTagInput}
-              onChangeText={setEditingCustomTagInput}
-            />
-            <Pressable
-              onPress={() => editingPostId && handleUpdateTags(editingPostId, editingCustomTagInput)}
-              style={styles.editSaveCustomTagButton}
-              disabled={isUpdatingTag || parseTagListInput(editingCustomTagInput).length === 0}
-            >
-              <Text style={styles.editSaveCustomTagButtonText}>Save tags</Text>
-            </Pressable>
-            <View style={styles.editTagList}>
-              {composerTopTagOptions.map((tag) => (
-                <Pressable
-                  key={tag}
-                  onPress={() => {
-                    if (!editingPostId) return;
-                    const existing = parseTagListInput(editingCustomTagInput);
-                    const toggled = existing.includes(tag)
-                      ? existing.filter((value) => value !== tag)
-                      : [...existing, tag];
-                    setEditingCustomTagInput(toggled.join(', '));
-                  }}
-                  style={styles.editTagOption}
-                  disabled={isUpdatingTag}
-                >
-                  <Text style={styles.editTagOptionText}>{tag}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        </Pressable>
       </Modal>
     </LinearGradient>
   );
@@ -868,13 +815,6 @@ function mergeAndDedupeTags(tags: string[]): string[] {
     output.push(tag);
   }
   return output;
-}
-
-function areTagArraysEqual(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  const normalizedA = a.map((tag) => tag.toLowerCase());
-  const normalizedB = b.map((tag) => tag.toLowerCase());
-  return normalizedA.every((tag, index) => tag === normalizedB[index]);
 }
 
 function computeTagDiff(previousTags: string[], nextTags: string[]): { added: string[]; removed: string[] } {
