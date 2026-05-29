@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useCommunityStore } from '@/stores/communityStore';
 import { useAuthStore } from '@/stores/authStore';
-import { COMMUNITY_CHANNELS } from '@/lib/stream/channels';
+import { COMMUNITY_CHANNEL } from '@/lib/stream/channels';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { hasSupabaseConfig, supabase } from '@/lib/supabase';
 
@@ -46,11 +46,11 @@ export default function ThreadScreen() {
   const channelRef = useRef<any>(null);
   const flatListRef = useRef<FlatList>(null);
 
-  const channelConfig = COMMUNITY_CHANNELS.find((c) => c.id === channelId);
-  const channelName = channelConfig?.name ?? channelId ?? 'Channel';
+  const resolvedChannelId = channelId ?? COMMUNITY_CHANNEL.id;
+  const channelName = COMMUNITY_CHANNEL.name;
 
   useEffect(() => {
-    if (!client || !channelId || !messageId) return;
+    if (!client || !resolvedChannelId || !messageId) return;
 
     let isSubscribed = true;
 
@@ -59,9 +59,9 @@ export default function ThreadScreen() {
       setError(null);
 
       try {
-        const ch = client.channel('messaging', channelId, {
+        const ch = client.channel('messaging', resolvedChannelId, {
           name: channelName,
-          description: channelConfig?.description,
+          description: COMMUNITY_CHANNEL.description,
         } as Record<string, unknown>);
 
         await ch.watch();
@@ -135,7 +135,7 @@ export default function ThreadScreen() {
     return () => {
       isSubscribed = false;
     };
-  }, [client, channelId, messageId, channelName, channelConfig?.description]);
+  }, [client, resolvedChannelId, messageId, channelName]);
 
   // Ensure we always start scrolled to the latest messages when the thread loads or updates.
   useEffect(() => {

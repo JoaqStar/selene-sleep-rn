@@ -8,6 +8,7 @@ import Colors from '@/constants/colors';
 import { useArticles } from '@/lib/hooks/useArticlesQuery';
 import { Article } from '@/types';
 import ArticleCard from '@/components/ArticleCard';
+import TagPillSlider from '@/components/TagPillSlider';
 import { supabase } from '@/lib/supabase';
 
 const CATEGORY_FILTERS = [
@@ -97,29 +98,12 @@ export default function LearnScreen() {
         </Animated.View>
 
         <Animated.View style={{ opacity: fadeAnim }}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.categoryScroll}
-            contentContainerStyle={styles.categoryContainer}
-          >
-            {CATEGORY_FILTERS.map((cat) => {
-              const isActive = cat.label === activeCategory;
-              return (
-                <Pressable
-                  key={cat.label}
-                  onPress={() => setActiveCategory(cat.label)}
-                  testID={`learn-category-${cat.label}`}
-                >
-                  <View style={[styles.categoryPill, isActive && styles.categoryPillActive]}>
-                    <Text style={[styles.categoryPillText, isActive && styles.categoryPillTextActive]}>
-                      {cat.label}
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+          <TagPillSlider
+            options={CATEGORY_FILTERS.map((cat) => cat.label)}
+            selectedValues={[activeCategory]}
+            onPressOption={setActiveCategory}
+            testIDPrefix="learn-category"
+          />
         </Animated.View>
 
         <Animated.View style={{ opacity: fadeAnim }}>
@@ -190,33 +174,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     paddingHorizontal: 10,
-  },
-  categoryScroll: {
-    marginBottom: 20,
-  },
-  categoryContainer: {
-    gap: 8,
-    paddingVertical: 4,
-  },
-  categoryPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  categoryPillActive: {
-    backgroundColor: Colors.accentDim,
-    borderColor: 'rgba(201, 169, 110, 0.3)',
-  },
-  categoryPillText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontWeight: '500' as const,
-  },
-  categoryPillTextActive: {
-    color: Colors.accent,
   },
   errorBanner: {
     borderRadius: 12,

@@ -206,7 +206,7 @@ Ensure the Edge Functions have `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` se
 
 ### Community triggers
 
-- Channel likes (`app/(tabs)/community/[channelId].tsx`):
+- Community feed likes (`app/(tabs)/community/index.tsx`):
   - After a like is successfully sent to Stream, the app fires a best-effort POST to `notify-like` for the post owner (if Supabase is configured).
 - Thread likes and replies (`app/(tabs)/community/thread.tsx`):
   - Likes call `notify-like` for the parent or reply author.
