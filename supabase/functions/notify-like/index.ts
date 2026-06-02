@@ -96,11 +96,11 @@ async function resolveActorDisplayName(
     .maybeSingle();
 
   if (!userError && userRow) {
-    if (typeof userRow.display_name === 'string' && userRow.display_name.trim()) {
-      return userRow.display_name.trim();
-    }
     if (typeof userRow.username === 'string' && userRow.username.trim()) {
       return userRow.username.trim();
+    }
+    if (typeof userRow.display_name === 'string' && userRow.display_name.trim()) {
+      return userRow.display_name.trim();
     }
   } else if (userError && userError.code !== 'PGRST205') {
     console.warn('[notify-like] users lookup failed', userError);

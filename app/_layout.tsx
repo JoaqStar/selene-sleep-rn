@@ -17,14 +17,7 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
-  const {
-    isOnboarded,
-    isLoading,
-    hasUsername,
-    usernameDbReady,
-    profileChecked,
-    loadUserProfile,
-  } = useOnboardingStore();
+  const { hasUsername, usernameDbReady, profileChecked, loadUserProfile } = useOnboardingStore();
   const { session } = useAuthStore();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
@@ -43,7 +36,6 @@ function RootLayoutNav() {
   const needsUsername = Boolean(
     session && profileChecked && usernameDbReady && !hasUsername,
   );
-  const needsOnboarding = Boolean(session && profileChecked && hasUsername && !isOnboarded);
   const onSignIn = activeRoute === 'sign-in';
   const onCompleteProfile = activeRoute === 'complete-profile';
   const onOnboarding = activeRoute === 'onboarding';
@@ -55,8 +47,9 @@ function RootLayoutNav() {
   return (
     <>
       {!session && !onSignIn && <Redirect href="/sign-in" />}
-      {needsUsername && !onCompleteProfile && <Redirect href="/complete-profile" />}
-      {needsOnboarding && !onOnboarding && <Redirect href="/onboarding" />}
+      {needsUsername && !onCompleteProfile && !onOnboarding && (
+        <Redirect href="/complete-profile" />
+      )}
       <Stack
         screenOptions={{
           headerBackTitle: "Back",

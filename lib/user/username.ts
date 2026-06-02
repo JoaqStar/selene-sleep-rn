@@ -46,6 +46,28 @@ export function validateUsername(input: string): UsernameValidationResult {
   return { ok: true, normalized };
 }
 
+/** Matches auto-generated handles from the username backfill migration. */
+export function isProvisionalUsername(username: string): boolean {
+  return /^user_[a-f0-9]{8}$/i.test(username.trim());
+}
+
+/** Best-effort conversion from a legacy first name / display label to a valid username. */
+export function deriveUsernameFromLabel(label: string): string | null {
+  const derived = label
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .slice(0, USERNAME_MAX_LENGTH);
+
+  if (derived.length < USERNAME_MIN_LENGTH) {
+    return null;
+  }
+
+  const validation = validateUsername(derived);
+  return validation.ok ? validation.normalized : null;
+}
+
 export function isUniqueViolationError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const code = (error as { code?: string }).code;

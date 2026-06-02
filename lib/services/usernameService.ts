@@ -1,8 +1,26 @@
 import { supabase, hasSupabaseConfig } from '@/lib/supabase';
 import {
   isUniqueViolationError,
+  normalizeUsernameForCheck,
   validateUsername,
 } from '@/lib/user/username';
+
+const AVAILABILITY_CHECK_TIMEOUT_MS = 12_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Username check timed out')), ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
 
 export type UserProfile = {
   id: string;
@@ -109,27 +127,42 @@ export async function fetchCurrentUserProfile(): Promise<UserProfile | null> {
 
 export async function checkUsernameAvailable(
   username: string,
-  options?: { excludeCurrentUser?: boolean },
+  options?: {
+    excludeCurrentUser?: boolean;
+    excludeUserId?: string | null;
+    currentUsername?: string;
+  },
 ): Promise<{ available: boolean; error?: string }> {
   const validation = validateUsername(username);
   if (!validation.ok) {
     return { available: false, error: validation.error };
   }
 
+  const baseline = options?.currentUsername?.trim();
+  if (
+    baseline &&
+    normalizeUsernameForCheck(baseline) === validation.normalized
+  ) {
+    return { available: true };
+  }
+
   if (!hasSupabaseConfig || !supabase) {
     return { available: true };
   }
 
-  let excludeUserId: string | null = null;
-  if (options?.excludeCurrentUser) {
+  let excludeUserId = options?.excludeUserId ?? null;
+  if (!excludeUserId && options?.excludeCurrentUser) {
     const { data } = await supabase.auth.getUser();
     excludeUserId = data.user?.id ?? null;
   }
 
-  const { data, error } = await supabase.rpc('is_username_available', {
-    p_username: validation.normalized,
-    p_exclude_user_id: excludeUserId,
-  });
+  const { data, error } = await withTimeout(
+    supabase.rpc('is_username_available', {
+      p_username: validation.normalized,
+      p_exclude_user_id: excludeUserId,
+    }),
+    AVAILABILITY_CHECK_TIMEOUT_MS,
+  );
 
   if (error) {
     console.error('[UsernameService] is_username_available RPC failed:', error);
@@ -194,58 +227,35 @@ export async function saveUsername(username: string): Promise<{ ok: true } | { o
   return { ok: true };
 }
 
-export async function syncUserProfileFields(input: {
-  displayName: string;
-  username: string;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  const displayTrimmed = input.displayName.trim();
-  const finalDisplay = displayTrimmed.length > 0 ? displayTrimmed : 'Friend';
-
-  const usernameResult = await saveUsername(input.username);
+export async function claimUsername(
+  username: string,
+): Promise<{ ok: true; username: string } | { ok: false; error: string }> {
+  const usernameResult = await saveUsername(username);
   if (!usernameResult.ok) {
     return usernameResult;
   }
 
+  const validation = validateUsername(username);
+  const storedUsername = validation.ok
+    ? validation.normalized
+    : username.trim().toLowerCase();
+
   if (!hasSupabaseConfig || !supabase) {
-    return { ok: false, error: 'Account storage is not configured.' };
+    return { ok: true, username: storedUsername };
   }
 
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData.user) {
-    return { ok: false, error: 'You must be signed in.' };
-  }
+  // Do not await: updateUser emits USER_UPDATED and can deadlock if auth listeners
+  // perform awaited work before this call returns.
+  void supabase.auth
+    .updateUser({ data: { full_name: storedUsername } })
+    .then(({ error: metaError }) => {
+      if (metaError) {
+        console.error('[UsernameService] updateUser metadata failed:', metaError);
+      }
+    })
+    .catch((err) => {
+      console.error('[UsernameService] updateUser metadata unexpected error:', err);
+    });
 
-  const { error: metaError } = await supabase.auth.updateUser({
-    data: { full_name: finalDisplay },
-  });
-  if (metaError) {
-    console.error('[UsernameService] updateUser metadata failed:', metaError);
-  }
-
-  const usernameValidation = validateUsername(input.username);
-  const storedUsername = usernameValidation.ok
-    ? usernameValidation.normalized
-    : input.username.trim().toLowerCase();
-
-  const { error: tableError } = await supabase
-    .from('users')
-    .upsert(
-      {
-        id: authData.user.id,
-        email: authData.user.email ?? null,
-        display_name: finalDisplay,
-        username: storedUsername,
-      },
-      { onConflict: 'id' },
-    );
-
-  if (tableError) {
-    if (isUniqueViolationError(tableError)) {
-      return { ok: false, error: 'That username was just taken. Try another.' };
-    }
-    console.error('[UsernameService] syncUserProfileFields failed:', tableError);
-    return { ok: false, error: 'Could not save profile. Try again.' };
-  }
-
-  return { ok: true };
+  return { ok: true, username: storedUsername };
 }

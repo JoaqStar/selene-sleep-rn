@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, hasSupabaseConfig } from '@/lib/supabase';
-import { fetchCurrentUserProfile, syncUserProfileFields } from '@/lib/services/usernameService';
+import { fetchCurrentUserProfile, claimUsername } from '@/lib/services/usernameService';
+import { deriveUsernameFromLabel, isProvisionalUsername } from '@/lib/user/username';
 
 let profileLoadInFlight: Promise<void> | null = null;
 let profileLoadUserId: string | null = null;
@@ -26,30 +27,21 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 interface OnboardingState {
-  userName: string;
   username: string;
   isOnboarded: boolean;
   hasUsername: boolean;
-  /** When false, DB migration for username is not applied — do not gate the app on username. */
   usernameDbReady: boolean;
   isLoading: boolean;
   profileLoading: boolean;
-  /** True after the first profile fetch attempt finishes (success, error, or timeout). */
   profileChecked: boolean;
-  setUserName: (name: string) => void;
   setUsername: (username: string) => void;
-  completeOnboarding: (
-    displayName: string,
-    username: string,
-  ) => Promise<{ ok: true } | { ok: false; error: string }>;
-  updateDisplayName: (displayName: string) => Promise<void>;
+  completeOnboarding: (username: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   loadOnboardingState: () => Promise<void>;
   loadUserProfile: (userId?: string) => Promise<void>;
   resetOnboarding: () => Promise<void>;
 }
 
 export const useOnboardingStore = create<OnboardingState>((set, get) => ({
-  userName: '',
   username: '',
   isOnboarded: false,
   hasUsername: false,
@@ -58,77 +50,28 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   profileLoading: false,
   profileChecked: false,
 
-  setUserName: (name: string) => set({ userName: name }),
-
   setUsername: (username: string) => set({ username }),
 
-  completeOnboarding: async (displayName: string, username: string) => {
-    const trimmedDisplay = displayName.trim();
-    const finalDisplay = trimmedDisplay.length > 0 ? trimmedDisplay : 'Friend';
-
-    const result = await syncUserProfileFields({
-      displayName: finalDisplay,
-      username,
-    });
-
+  completeOnboarding: async (username: string) => {
+    const result = await claimUsername(username);
     if (!result.ok) {
       return result;
     }
 
     try {
-      await AsyncStorage.setItem('selene_user_name', finalDisplay);
-      await AsyncStorage.setItem('selene_username', username.trim().toLowerCase());
+      await AsyncStorage.setItem('selene_username', result.username);
       await AsyncStorage.setItem('selene_onboarded', 'true');
+      await AsyncStorage.removeItem('selene_user_name');
       set({
-        userName: finalDisplay,
-        username: username.trim().toLowerCase(),
+        username: result.username,
         isOnboarded: true,
         hasUsername: true,
       });
-      console.log('[Onboarding] completed:', { display: finalDisplay, username });
+      console.log('[Onboarding] completed:', result.username);
       return { ok: true };
     } catch (error) {
       console.error('[Onboarding] Failed to save local state:', error);
       return { ok: false, error: 'Could not save profile locally. Try again.' };
-    }
-  },
-
-  updateDisplayName: async (displayName: string) => {
-    const trimmed = displayName.trim();
-    const finalName = trimmed.length > 0 ? trimmed : 'Friend';
-
-    await AsyncStorage.setItem('selene_user_name', finalName);
-    set({ userName: finalName });
-
-    if (!hasSupabaseConfig || !supabase) return;
-
-    const { error: updateError } = await supabase.auth.updateUser({
-      data: { full_name: finalName },
-    });
-    if (updateError) {
-      console.error('[Onboarding] Failed to update auth metadata:', updateError);
-    }
-
-    try {
-      const { data, error: userError } = await supabase.auth.getUser();
-      if (userError || !data?.user) return;
-
-      const { error: tableError } = await supabase
-        .from('users')
-        .upsert(
-          {
-            id: data.user.id,
-            email: data.user.email ?? null,
-            display_name: finalName,
-          },
-          { onConflict: 'id' },
-        );
-
-      if (tableError) {
-        console.error('[Onboarding] Failed to update display_name:', tableError);
-      }
-    } catch (tableException) {
-      console.error('[Onboarding] Unexpected error updating display_name:', tableException);
     }
   },
 
@@ -167,24 +110,40 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
           return;
         }
 
-        const hasUsername = Boolean(profile.username?.trim());
+        let storedUsername = profile.username?.trim() ?? '';
+
+        if (storedUsername && isProvisionalUsername(storedUsername)) {
+          let metaLabel = '';
+          if (hasSupabaseConfig && supabase) {
+            const { data: authData } = await supabase.auth.getUser();
+            const meta = (authData.user?.user_metadata ?? {}) as Record<string, unknown>;
+            metaLabel =
+              (typeof meta.full_name === 'string' && meta.full_name) ||
+              (typeof meta.name === 'string' && meta.name) ||
+              '';
+          }
+          const label = profile.display_name?.trim() || metaLabel.trim();
+          const derived = deriveUsernameFromLabel(label);
+          if (derived) {
+            const claim = await claimUsername(derived);
+            if (claim.ok) {
+              storedUsername = claim.username;
+            }
+          }
+        }
+
+        const hasRealUsername =
+          storedUsername.length > 0 && !isProvisionalUsername(storedUsername);
+
         const updates: Partial<OnboardingState> = {
-          hasUsername,
+          hasUsername: hasRealUsername,
           usernameDbReady: true,
+          isOnboarded: hasRealUsername,
         };
 
-        if (profile.username) {
-          updates.username = profile.username;
-          await AsyncStorage.setItem('selene_username', profile.username);
-        }
-        if (profile.display_name?.trim()) {
-          updates.userName = profile.display_name.trim();
-          await AsyncStorage.setItem('selene_user_name', profile.display_name.trim());
-        }
-
-        const localName = get().userName.trim() || profile.display_name?.trim() || '';
-        if (hasUsername && localName.length > 0) {
-          updates.isOnboarded = true;
+        if (hasRealUsername) {
+          updates.username = storedUsername;
+          await AsyncStorage.setItem('selene_username', storedUsername);
           await AsyncStorage.setItem('selene_onboarded', 'true');
         }
 
@@ -207,13 +166,8 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
 
   resetOnboarding: async () => {
     try {
-      await AsyncStorage.multiRemove([
-        'selene_user_name',
-        'selene_username',
-        'selene_onboarded',
-      ]);
+      await AsyncStorage.multiRemove(['selene_username', 'selene_onboarded', 'selene_user_name']);
       set({
-        userName: '',
         username: '',
         isOnboarded: false,
         hasUsername: false,
@@ -226,29 +180,30 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
 
   loadOnboardingState: async () => {
     try {
-      const [name, username, onboarded] = await Promise.all([
+      const [legacyName, username, onboarded] = await Promise.all([
         AsyncStorage.getItem('selene_user_name'),
         AsyncStorage.getItem('selene_username'),
         AsyncStorage.getItem('selene_onboarded'),
       ]);
-      const userName = name ?? '';
-      const storedUsername = username ?? '';
-      const isOnboarded =
-        onboarded === 'true' &&
-        userName.trim().length > 0 &&
-        storedUsername.trim().length > 0;
+
+      let storedUsername = username ?? '';
+      if (!storedUsername.trim() && legacyName?.trim()) {
+        const derived = deriveUsernameFromLabel(legacyName);
+        if (derived) {
+          storedUsername = derived;
+        }
+      }
+
+      const hasUsername = storedUsername.trim().length > 0;
+      const isOnboarded = onboarded === 'true' && hasUsername;
+
       set({
-        userName,
         username: storedUsername,
         isOnboarded,
-        hasUsername: storedUsername.trim().length > 0,
+        hasUsername,
         isLoading: false,
       });
-      console.log('[Onboarding] state loaded:', {
-        name: userName,
-        username: storedUsername,
-        onboarded: isOnboarded,
-      });
+      console.log('[Onboarding] state loaded:', { username: storedUsername, onboarded: isOnboarded });
     } catch (error) {
       console.error('[Onboarding] Failed to load state:', error);
       set({ isLoading: false });

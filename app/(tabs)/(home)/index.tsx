@@ -15,7 +15,7 @@ import SessionCard from '@/components/SessionCard';
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { userName } = useOnboardingStore();
+  const { username } = useOnboardingStore();
   const { setCurrentSession } = usePlayerStore();
   const { data, isLoading, error, refetch, isRefetching } = useSessions();
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -125,7 +125,7 @@ export default function HomeScreen() {
               <Settings size={18} color={Colors.textMuted} />
             </Pressable>
           </View>
-          <Text style={styles.greeting}>{getGreeting()}, {userName || 'Friend'}</Text>
+          <Text style={styles.greeting}>{getGreeting()}, {username || 'Friend'}</Text>
           <Text style={styles.headerSubtitle}>Your space for better nights.</Text>
         </Animated.View>
 

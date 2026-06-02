@@ -1,9 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   Pressable,
   KeyboardAvoidingView,
   Platform,
@@ -20,12 +19,13 @@ import { useOnboardingStore } from '@/stores/onboardingStore';
 import { useAuthStore } from '@/stores/authStore';
 import { UsernameField } from '@/components/UsernameField';
 import { useUsernameAvailability } from '@/lib/hooks/useUsernameAvailability';
+import { deriveUsernameFromLabel } from '@/lib/user/username';
 
 export default function CompleteProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { session } = useAuthStore();
-  const { userName, completeOnboarding, usernameDbReady } = useOnboardingStore();
+  const { completeOnboarding, usernameDbReady } = useOnboardingStore();
 
   const rawMetadata = (session?.user?.user_metadata ?? {}) as Record<string, unknown>;
   const remoteName =
@@ -34,12 +34,19 @@ export default function CompleteProfileScreen() {
     '';
 
   const [username, setUsername] = useState('');
-  const [displayName, setDisplayName] = useState(userName || remoteName);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { status, message, canSubmit } = useUsernameAvailability(username, {
     excludeCurrentUser: true,
+    excludeUserId: session?.user?.id ?? null,
   });
-  const needsDisplayName = !userName.trim() && !remoteName.trim();
+
+  useEffect(() => {
+    if (username.trim()) return;
+    const suggestion = deriveUsernameFromLabel(remoteName);
+    if (suggestion) {
+      setUsername(suggestion);
+    }
+  }, [remoteName, username]);
 
   const canContinue = usernameDbReady && canSubmit && !isSubmitting;
 
@@ -47,9 +54,7 @@ export default function CompleteProfileScreen() {
     if (!canSubmit) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsSubmitting(true);
-    const finalDisplay =
-      displayName.trim() || remoteName.trim() || userName.trim() || 'Friend';
-    const result = await completeOnboarding(finalDisplay, username);
+    const result = await completeOnboarding(username);
     setIsSubmitting(false);
 
     if (!result.ok) {
@@ -58,7 +63,7 @@ export default function CompleteProfileScreen() {
     }
 
     router.replace('/(tabs)/(home)');
-  }, [canSubmit, displayName, remoteName, userName, username, completeOnboarding, router]);
+  }, [canSubmit, username, completeOnboarding, router]);
 
   return (
     <LinearGradient
@@ -76,18 +81,16 @@ export default function CompleteProfileScreen() {
           ]}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.title}>Complete your profile</Text>
+          <Text style={styles.title}>Choose your username</Text>
           <Text style={styles.subtitle}>
-            Pick a public username for Community. It must be unique across Selene.
+            This is how you appear in Community and on your Home greeting. It must be unique.
           </Text>
 
           {!usernameDbReady ? (
             <View style={styles.migrationBanner}>
               <Text style={styles.migrationTitle}>Supabase setup required</Text>
               <Text style={styles.migrationText}>
-                Run the username migration in your Supabase project (SQL Editor → paste and run
-                the file supabase/migrations/20250529120000_unique_username.sql), then reload the
-                app.
+                Run the username migrations in Supabase SQL editor, then reload the app.
               </Text>
             </View>
           ) : null}
@@ -101,20 +104,6 @@ export default function CompleteProfileScreen() {
               testID="complete-profile-username-input"
               autoFocus
             />
-
-            {needsDisplayName ? (
-              <View style={styles.displaySection}>
-                <Text style={styles.displayLabel}>Your name (optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="First name for Home"
-                  placeholderTextColor={Colors.textMuted}
-                  value={displayName}
-                  onChangeText={setDisplayName}
-                  autoCapitalize="words"
-                />
-              </View>
-            ) : null}
           </View>
 
           <Pressable
@@ -153,26 +142,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   form: {
-    gap: 28,
     marginTop: 8,
-  },
-  displaySection: {
-    gap: 8,
-  },
-  displayLabel: {
-    fontSize: 15,
-    color: Colors.text,
-    textAlign: 'center',
-  },
-  input: {
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    padding: 16,
-    fontSize: 17,
-    color: Colors.text,
-    textAlign: 'center',
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
   },
   button: {
     marginTop: 8,

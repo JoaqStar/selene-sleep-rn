@@ -98,6 +98,27 @@ export const useAuthStore = create<AuthState>((set) => ({
       handleDeepLink(event.url);
     });
 
+    const registerPushTokenAsync = (userId: string) => {
+      void (async () => {
+        try {
+          console.log('[DebugAppLoadingIssue] registerPushTokenAsync: requesting Expo push token');
+          const token = await getExpoPushToken();
+          console.log('[DebugAppLoadingIssue] registerPushTokenAsync: getExpoPushToken result:', token);
+          if (!token) return;
+          console.log('[DebugAppLoadingIssue] registerPushTokenAsync: registering with Supabase');
+          await registerPushTokenForUser({
+            userId,
+            expoPushToken: token,
+            platform:
+              Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'unknown',
+          });
+          console.log('[DebugAppLoadingIssue] registerPushTokenAsync: finished');
+        } catch (error) {
+          console.error('[Auth] Push token registration failed:', error);
+        }
+      })();
+    };
+
     supabaseClient.auth.getSession().then(async ({ data: { session } }) => {
       console.log('[Auth] Initial session:', session ? 'active' : 'none');
       console.log('[Auth] Initial session token:', session?.access_token);
@@ -106,18 +127,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       markAuthReady();
 
       if (session?.user?.id) {
-        console.log('[DebugAppLoadingIssue] Session has user, requesting Expo push token');
-        const token = await getExpoPushToken();
-        console.log('[DebugAppLoadingIssue] getExpoPushToken result:', token);
-        if (token) {
-          console.log('[DebugAppLoadingIssue] Registering push token with Supabase');
-          await registerPushTokenForUser({
-            userId: session.user.id,
-            expoPushToken: token,
-            platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'unknown',
-          });
-          console.log('[DebugAppLoadingIssue] Finished registerPushTokenForUser');
-        }
+        registerPushTokenAsync(session.user.id);
       }
     }).catch((error) => {
       console.error('[Auth] Failed to get session:', error);
@@ -126,25 +136,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
 
     const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
         console.log('[Auth] State changed:', _event, session ? 'active' : 'none');
         console.log('[DebugAppLoadingIssue] onAuthStateChange received event:', _event);
         set({ session });
 
-        if (session?.user?.id) {
-          console.log('[DebugAppLoadingIssue] onAuthStateChange: session has user, requesting Expo push token');
-          const token = await getExpoPushToken();
-          console.log('[DebugAppLoadingIssue] onAuthStateChange: getExpoPushToken result:', token);
-          if (token) {
-            console.log('[DebugAppLoadingIssue] onAuthStateChange: registering push token with Supabase');
-            await registerPushTokenForUser({
-              userId: session.user.id,
-              expoPushToken: token,
-              platform:
-                Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'unknown',
-            });
-            console.log('[DebugAppLoadingIssue] onAuthStateChange: finished registerPushTokenForUser');
-          }
+        // Only register on sign-in / initial session — not USER_UPDATED (e.g. username
+        // metadata), which would block awaiting auth.updateUser() in claimUsername.
+        const shouldRegisterPush =
+          session?.user?.id && (_event === 'SIGNED_IN' || _event === 'INITIAL_SESSION');
+        if (shouldRegisterPush) {
+          registerPushTokenAsync(session.user.id);
         }
       },
     );

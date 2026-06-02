@@ -16,7 +16,7 @@ export function useStreamChat() {
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const { session } = useAuthStore();
-  const { userName, username } = useOnboardingStore();
+  const { username } = useOnboardingStore();
 
   useEffect(() => {
     if (!session?.user || !apiKey || connectingRef.current) return;
@@ -24,11 +24,7 @@ export function useStreamChat() {
     const userId = session.user.id;
     const userEmail = session.user.email ?? 'user';
     const streamDisplayName =
-      (username && username.trim().length > 0)
-        ? username.trim()
-        : (userName && userName.trim().length > 0)
-          ? userName.trim()
-          : userEmail.split('@')[0];
+      username && username.trim().length > 0 ? username.trim() : userEmail.split('@')[0];
 
     const connectOnce = async () => {
       connectingRef.current = true;
@@ -122,7 +118,7 @@ export function useStreamChat() {
         connectingRef.current = false;
       }
     };
-  }, [session?.user?.id, apiKey, userName, username]);
+  }, [session?.user?.id, apiKey, username]);
 
   const retry = () => {
     if (!session?.user || !apiKey) return;

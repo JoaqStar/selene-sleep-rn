@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Switch, ScrollView, TextInput, Pressable, Linking, Platform, AppState, AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, Switch, ScrollView, Pressable, Linking, Platform, AppState, AppStateStatus } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -13,7 +13,7 @@ import { supabase, hasSupabaseConfig } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UsernameField } from '@/components/UsernameField';
 import { useUsernameAvailability } from '@/lib/hooks/useUsernameAvailability';
-import { saveUsername } from '@/lib/services/usernameService';
+import { claimUsername } from '@/lib/services/usernameService';
 
 type NotificationPreferences = {
   likes_enabled: boolean;
@@ -29,51 +29,38 @@ const defaultPrefs: NotificationPreferences = {
 
 export default function SettingsScreen() {
   const { session, signOut } = useAuthStore();
-  const { userName, username: storedUsername, updateDisplayName, setUsername: setStoredUsername } =
-    useOnboardingStore();
+  const { username: storedUsername, setUsername: setStoredUsername } = useOnboardingStore();
   const [prefs, setPrefs] = useState<NotificationPreferences>(defaultPrefs);
   const [isLoading, setIsLoading] = useState(false);
-  const [name, setName] = useState(userName);
-  const [originalName, setOriginalName] = useState(userName);
-  const [isSavingName, setIsSavingName] = useState(false);
   const [username, setUsername] = useState(storedUsername);
   const [originalUsername, setOriginalUsername] = useState(storedUsername);
   const [isSavingUsername, setIsSavingUsername] = useState(false);
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const usernameChanged = username.trim().toLowerCase() !== (originalUsername || '').trim().toLowerCase();
   const { status: usernameStatus, message: usernameMessage, canSubmit: usernameCanSubmit } =
-    useUsernameAvailability(username, { excludeCurrentUser: true });
+    useUsernameAvailability(username, {
+      excludeCurrentUser: true,
+      excludeUserId: session?.user?.id ?? null,
+      currentUsername: originalUsername,
+    });
   const [systemNotificationsEnabled, setSystemNotificationsEnabled] = useState<boolean | null>(null);
   const router = useRouter();
   const insets = useSafeAreaInsets();
-
-  const handleSaveName = useCallback(async () => {
-    const trimmed = name.trim();
-    if (!trimmed || trimmed === (originalName || '').trim()) return;
-    try {
-      setIsSavingName(true);
-      await updateDisplayName(trimmed);
-      setOriginalName(trimmed);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } finally {
-      setIsSavingName(false);
-    }
-  }, [name, originalName, updateDisplayName]);
 
   const handleSaveUsername = useCallback(async () => {
     if (!usernameChanged || !usernameCanSubmit) return;
     setUsernameError(null);
     try {
       setIsSavingUsername(true);
-      const result = await saveUsername(username);
+      const result = await claimUsername(username);
       if (!result.ok) {
         setUsernameError(result.error);
         return;
       }
-      const normalized = username.trim().toLowerCase();
-      await AsyncStorage.setItem('selene_username', normalized);
-      setStoredUsername(normalized);
-      setOriginalUsername(normalized);
+      await AsyncStorage.setItem('selene_username', result.username);
+      await AsyncStorage.setItem('selene_onboarded', 'true');
+      setStoredUsername(result.username);
+      setOriginalUsername(result.username);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } finally {
       setIsSavingUsername(false);
@@ -85,11 +72,6 @@ export default function SettingsScreen() {
     setUsernameError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [originalUsername]);
-
-  const handleCancelName = useCallback(() => {
-    setName(originalName || '');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, [originalName]);
 
   const handleSignOut = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -137,11 +119,6 @@ export default function SettingsScreen() {
   useEffect(() => {
     loadPreferences();
   }, [loadPreferences]);
-
-  useEffect(() => {
-    setName(userName);
-    setOriginalName(userName);
-  }, [userName]);
 
   useEffect(() => {
     setUsername(storedUsername);
@@ -248,7 +225,7 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <Text style={styles.subheading}>Username</Text>
             <Text style={styles.subtitle}>
-              Your public handle in Community. Must be unique.
+              Shown in Community and on your Home greeting. Must be unique.
             </Text>
             <View style={styles.usernameFieldWrap}>
               <UsernameField
@@ -301,61 +278,6 @@ export default function SettingsScreen() {
               >
                 <Text style={styles.namePrimaryText}>
                   {isSavingUsername ? 'Saving…' : 'Save'}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.subheading}>Your name</Text>
-            <Text style={styles.subtitle}>
-              This is how Selene will greet you on the Home screen.
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Your name"
-              placeholderTextColor={Colors.textMuted}
-              value={name}
-              onChangeText={setName}
-              returnKeyType="done"
-            />
-            <View style={styles.nameActionsRow}>
-              <Pressable
-                onPress={handleCancelName}
-                disabled={name.trim() === (originalName || '').trim()}
-                style={({ pressed }) => [
-                  styles.nameSecondaryButton,
-                  (pressed && name.trim() !== (originalName || '').trim()) &&
-                    styles.nameSecondaryButtonPressed,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.nameSecondaryText,
-                    name.trim() === (originalName || '').trim() && styles.nameDisabledText,
-                  ]}
-                >
-                  Cancel
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={handleSaveName}
-                disabled={
-                  isSavingName ||
-                  !name.trim() ||
-                  name.trim() === (originalName || '').trim()
-                }
-                style={({ pressed }) => [
-                  styles.namePrimaryButton,
-                  (pressed &&
-                    !isSavingName &&
-                    name.trim() &&
-                    name.trim() !== (originalName || '').trim()) &&
-                    styles.namePrimaryButtonPressed,
-                ]}
-              >
-                <Text style={styles.namePrimaryText}>
-                  {isSavingName ? 'Saving…' : 'Save'}
                 </Text>
               </Pressable>
             </View>

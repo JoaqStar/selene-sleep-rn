@@ -30,7 +30,9 @@ export function UsernameField({
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>Choose your username</Text>
-      <Text style={styles.helper}>3–20 characters: letters, numbers, underscore</Text>
+      <Text style={styles.helper}>
+        Used in Community and your Home greeting. 3–20 characters: letters, numbers, underscore.
+      </Text>
       <View style={styles.inputRow}>
         <TextInput
           style={[styles.input, { borderColor }]}

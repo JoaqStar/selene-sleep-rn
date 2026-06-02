@@ -1,0 +1,2 @@
+-- Superseded by 20250529150000_fix_provisional_usernames.sql (also reads auth.users metadata).
+-- Keep for history; run 20250529150000 instead if names are still user_xxxxxxxx.

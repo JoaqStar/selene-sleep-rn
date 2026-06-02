@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   Pressable,
   Animated,
   KeyboardAvoidingView,
@@ -22,26 +21,16 @@ import { UsernameField } from '@/components/UsernameField';
 import { useUsernameAvailability } from '@/lib/hooks/useUsernameAvailability';
 
 export default function OnboardingScreen() {
-  const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { completeOnboarding, hasUsername, username: storedUsername } = useOnboardingStore();
-  const needsUsernameStep = !hasUsername;
-  const { status, message, canSubmit } = useUsernameAvailability(username, {
-    excludeCurrentUser: hasUsername,
-  });
+  const { completeOnboarding } = useOnboardingStore();
+  const { status, message, canSubmit } = useUsernameAvailability(username);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const moonAnim = useRef(new Animated.Value(0)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
-
-  React.useEffect(() => {
-    if (storedUsername) {
-      setUsername(storedUsername);
-    }
-  }, [storedUsername]);
 
   React.useEffect(() => {
     Animated.parallel([
@@ -56,16 +45,13 @@ export default function OnboardingScreen() {
     ]).start();
   }, []);
 
-  const usernameReady = needsUsernameStep ? canSubmit : username.trim().length > 0;
-  const canContinue = usernameReady && !isSubmitting;
+  const canContinue = canSubmit && !isSubmitting;
 
   const handleContinue = useCallback(async () => {
-    if (!usernameReady) return;
+    if (!canSubmit) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsSubmitting(true);
-    const trimmedDisplay = displayName.trim() || 'Friend';
-    const finalUsername = needsUsernameStep ? username : storedUsername || username;
-    const result = await completeOnboarding(trimmedDisplay, finalUsername);
+    const result = await completeOnboarding(username);
     setIsSubmitting(false);
 
     if (!result.ok) {
@@ -74,7 +60,7 @@ export default function OnboardingScreen() {
     }
 
     router.replace('/(tabs)/(home)');
-  }, [usernameReady, displayName, username, storedUsername, needsUsernameStep, completeOnboarding, router]);
+  }, [canSubmit, username, completeOnboarding, router]);
 
   const moonTranslateY = moonAnim.interpolate({
     inputRange: [0, 1],
@@ -106,33 +92,14 @@ export default function OnboardingScreen() {
           </Animated.View>
 
           <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-            <View style={styles.section}>
-              {needsUsernameStep ? (
-                <UsernameField
-                  value={username}
-                  onChangeText={setUsername}
-                  status={status}
-                  message={message}
-                  testID="onboarding-username-input"
-                  autoFocus
-                />
-              ) : null}
-
-              <View style={styles.displaySection}>
-                <Text style={styles.question}>What should we call you?</Text>
-                <Text style={styles.questionSubtitle}>Shown on Home — not your public handle.</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Your first name"
-                  placeholderTextColor={Colors.textMuted}
-                  value={displayName}
-                  onChangeText={setDisplayName}
-                  returnKeyType="done"
-                  autoCapitalize="words"
-                  testID="onboarding-name-input"
-                />
-              </View>
-            </View>
+            <UsernameField
+              value={username}
+              onChangeText={setUsername}
+              status={status}
+              message={message}
+              testID="onboarding-username-input"
+              autoFocus
+            />
           </Animated.View>
 
           <Animated.View style={[styles.footer, { opacity: fadeAnim }]}>
@@ -200,36 +167,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: 'center',
-  },
-  section: {
-    gap: 32,
-    marginTop: 24,
-  },
-  displaySection: {
-    gap: 8,
-  },
-  question: {
-    fontSize: 22,
-    fontWeight: '400' as const,
-    color: Colors.text,
-    textAlign: 'center',
-    letterSpacing: 0.3,
-  },
-  questionSubtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    padding: 18,
-    fontSize: 18,
-    color: Colors.text,
-    textAlign: 'center',
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
   },
   button: {
     backgroundColor: Colors.accent,
