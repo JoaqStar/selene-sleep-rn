@@ -1,9 +1,10 @@
 import '@/lib/polyfills/punycode-polyfill';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, Redirect } from "expo-router";
+import { Stack, Redirect, useSegments, useRootNavigationState } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
 import React, { useEffect } from "react";
+import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -16,59 +17,46 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
-  const { isOnboarded, isLoading, loadOnboardingState } = useOnboardingStore();
-  const { session, isLoading: isAuthLoading, initialize } = useAuthStore();
+  const {
+    isOnboarded,
+    isLoading,
+    hasUsername,
+    usernameDbReady,
+    profileChecked,
+    loadUserProfile,
+  } = useOnboardingStore();
+  const { session } = useAuthStore();
+  const segments = useSegments();
+  const navigationState = useRootNavigationState();
+  const activeRoute = segments[0] ?? '';
 
   useEffect(() => {
-    console.log('[DebugAppLoadingIssue] RootLayoutNav mount: calling loadOnboardingState and initialize');
-    loadOnboardingState();
-    const unsubscribe = initialize();
-    return unsubscribe;
-  }, []);
-
-  const rawMetadata = (session?.user?.user_metadata ?? {}) as Record<string, any>;
-  const remoteName =
-    (typeof rawMetadata.full_name === 'string' && rawMetadata.full_name) ||
-    (typeof rawMetadata.name === 'string' && rawMetadata.name) ||
-    '';
-  const hasRemoteName = remoteName.trim().length > 0;
-
-  useEffect(() => {
-    // If Supabase already has a name for this user, sync it into the onboarding store
-    // so we don't show the onboarding "What should we call you?" screen again.
-    if (session && hasRemoteName && !isOnboarded) {
-      useOnboardingStore.getState().completeOnboarding(remoteName);
+    const userId = session?.user?.id;
+    if (userId) {
+      void loadUserProfile(userId);
+    } else {
+      void loadUserProfile(undefined);
     }
-  }, [session, hasRemoteName, isOnboarded, remoteName]);
+  }, [session?.user?.id, loadUserProfile]);
 
-  useEffect(() => {
-    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as any;
-      console.log('[Notifications] Response received', data);
-      // In a future iteration, we can deep link into specific screens based on data.type/deepLink.
-    });
+  const isNavigationReady = Boolean(navigationState?.key);
+  const needsUsername = Boolean(
+    session && profileChecked && usernameDbReady && !hasUsername,
+  );
+  const needsOnboarding = Boolean(session && profileChecked && hasUsername && !isOnboarded);
+  const onSignIn = activeRoute === 'sign-in';
+  const onCompleteProfile = activeRoute === 'complete-profile';
+  const onOnboarding = activeRoute === 'onboarding';
 
-    return () => {
-      responseSub.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isLoading && !isAuthLoading) {
-      console.log('[DebugAppLoadingIssue] Hiding splash screen. isLoading =', isLoading, 'isAuthLoading =', isAuthLoading);
-      SplashScreen.hideAsync();
-    }
-  }, [isLoading, isAuthLoading]);
-
-  if (isLoading || isAuthLoading) {
-    console.log('[DebugAppLoadingIssue] Still loading. isLoading =', isLoading, 'isAuthLoading =', isAuthLoading);
-    return null;
+  if (!isNavigationReady) {
+    return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
   }
 
   return (
     <>
-      {!session && <Redirect href="/sign-in" />}
-      {session && !isOnboarded && !hasRemoteName && <Redirect href="/onboarding" />}
+      {!session && !onSignIn && <Redirect href="/sign-in" />}
+      {needsUsername && !onCompleteProfile && <Redirect href="/complete-profile" />}
+      {needsOnboarding && !onOnboarding && <Redirect href="/onboarding" />}
       <Stack
         screenOptions={{
           headerBackTitle: "Back",
@@ -81,6 +69,10 @@ function RootLayoutNav() {
         />
         <Stack.Screen
           name="onboarding"
+          options={{ headerShown: false, animation: 'fade' }}
+        />
+        <Stack.Screen
+          name="complete-profile"
           options={{ headerShown: false, animation: 'fade' }}
         />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -105,6 +97,48 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  const { isLoading } = useOnboardingStore();
+  const { isLoading: isAuthLoading, initialize } = useAuthStore();
+
+  useEffect(() => {
+    console.log('[App] Boot: load onboarding state + auth');
+    void useOnboardingStore.getState().loadOnboardingState();
+    const unsubscribe = initialize();
+    return unsubscribe;
+  }, [initialize]);
+
+  useEffect(() => {
+    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as Record<string, unknown>;
+      console.log('[Notifications] Response received', data);
+    });
+
+    return () => {
+      responseSub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isLoading && !isAuthLoading) {
+      SplashScreen.hideAsync().catch((error) => {
+        console.warn('[App] SplashScreen.hideAsync failed:', error);
+      });
+    }
+  }, [isLoading, isAuthLoading]);
+
+  if (isLoading || isAuthLoading) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <SafeAreaProvider>
+            <StatusBar style="light" />
+            <View style={{ flex: 1, backgroundColor: Colors.background }} />
+          </SafeAreaProvider>
+        </GestureHandlerRootView>
+      </QueryClientProvider>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>

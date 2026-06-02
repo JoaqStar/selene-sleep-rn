@@ -45,21 +45,7 @@ serve(async (req) => {
       });
     }
 
-    const { data: actor, error: actorError } = await client
-      .from('profiles')
-      .select('full_name')
-      .eq('id', payload.actorUserId)
-      .maybeSingle();
-
-    if (actorError) {
-      if (actorError.code === 'PGRST205') {
-        console.warn('[notify-like] profiles table missing; using fallback display name');
-      } else {
-        console.error('[notify-like] Failed to load actor profile', actorError);
-      }
-    }
-
-    const displayName = actor?.full_name || 'Someone';
+    const displayName = await resolveActorDisplayName(client, payload.actorUserId);
 
     const title = 'New like on your post';
     const body = payload.messageSnippet
@@ -98,6 +84,44 @@ serve(async (req) => {
     return new Response('Internal error', { status: 500 });
   }
 });
+
+async function resolveActorDisplayName(
+  client: Awaited<ReturnType<typeof createSupabaseClient>>,
+  actorUserId: string,
+): Promise<string> {
+  const { data: userRow, error: userError } = await client
+    .from('users')
+    .select('display_name, username')
+    .eq('id', actorUserId)
+    .maybeSingle();
+
+  if (!userError && userRow) {
+    if (typeof userRow.display_name === 'string' && userRow.display_name.trim()) {
+      return userRow.display_name.trim();
+    }
+    if (typeof userRow.username === 'string' && userRow.username.trim()) {
+      return userRow.username.trim();
+    }
+  } else if (userError && userError.code !== 'PGRST205') {
+    console.warn('[notify-like] users lookup failed', userError);
+  }
+
+  const { data: actor, error: actorError } = await client
+    .from('profiles')
+    .select('full_name')
+    .eq('id', actorUserId)
+    .maybeSingle();
+
+  if (actorError) {
+    if (actorError.code === 'PGRST205') {
+      console.warn('[notify-like] profiles table missing; using fallback display name');
+    } else {
+      console.error('[notify-like] Failed to load actor profile', actorError);
+    }
+  }
+
+  return actor?.full_name || 'Someone';
+}
 
 async function createSupabaseClient(url: string, key: string) {
   const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.48.0');

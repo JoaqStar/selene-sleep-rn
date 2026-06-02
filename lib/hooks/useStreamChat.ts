@@ -16,16 +16,19 @@ export function useStreamChat() {
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const { session } = useAuthStore();
-  const { userName } = useOnboardingStore();
+  const { userName, username } = useOnboardingStore();
 
   useEffect(() => {
     if (!session?.user || !apiKey || connectingRef.current) return;
 
     const userId = session.user.id;
     const userEmail = session.user.email ?? 'user';
-    const displayName = (userName && userName.trim().length > 0)
-      ? userName.trim()
-      : userEmail.split('@')[0];
+    const streamDisplayName =
+      (username && username.trim().length > 0)
+        ? username.trim()
+        : (userName && userName.trim().length > 0)
+          ? userName.trim()
+          : userEmail.split('@')[0];
 
     const connectOnce = async () => {
       connectingRef.current = true;
@@ -38,7 +41,7 @@ export function useStreamChat() {
       await chatClient.connectUser(
         {
           id: userId,
-          name: displayName,
+          name: streamDisplayName,
         },
         streamToken,
       );
@@ -119,7 +122,7 @@ export function useStreamChat() {
         connectingRef.current = false;
       }
     };
-  }, [session?.user?.id, apiKey, userName]);
+  }, [session?.user?.id, apiKey, userName, username]);
 
   const retry = () => {
     if (!session?.user || !apiKey) return;

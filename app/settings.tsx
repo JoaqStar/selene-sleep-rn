@@ -10,6 +10,10 @@ import Colors from '@/constants/colors';
 import { useAuthStore } from '@/stores/authStore';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { supabase, hasSupabaseConfig } from '@/lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { UsernameField } from '@/components/UsernameField';
+import { useUsernameAvailability } from '@/lib/hooks/useUsernameAvailability';
+import { saveUsername } from '@/lib/services/usernameService';
 
 type NotificationPreferences = {
   likes_enabled: boolean;
@@ -25,12 +29,20 @@ const defaultPrefs: NotificationPreferences = {
 
 export default function SettingsScreen() {
   const { session, signOut } = useAuthStore();
-  const { userName, completeOnboarding } = useOnboardingStore();
+  const { userName, username: storedUsername, updateDisplayName, setUsername: setStoredUsername } =
+    useOnboardingStore();
   const [prefs, setPrefs] = useState<NotificationPreferences>(defaultPrefs);
   const [isLoading, setIsLoading] = useState(false);
   const [name, setName] = useState(userName);
   const [originalName, setOriginalName] = useState(userName);
   const [isSavingName, setIsSavingName] = useState(false);
+  const [username, setUsername] = useState(storedUsername);
+  const [originalUsername, setOriginalUsername] = useState(storedUsername);
+  const [isSavingUsername, setIsSavingUsername] = useState(false);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const usernameChanged = username.trim().toLowerCase() !== (originalUsername || '').trim().toLowerCase();
+  const { status: usernameStatus, message: usernameMessage, canSubmit: usernameCanSubmit } =
+    useUsernameAvailability(username, { excludeCurrentUser: true });
   const [systemNotificationsEnabled, setSystemNotificationsEnabled] = useState<boolean | null>(null);
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -40,13 +52,39 @@ export default function SettingsScreen() {
     if (!trimmed || trimmed === (originalName || '').trim()) return;
     try {
       setIsSavingName(true);
-      await completeOnboarding(trimmed);
+      await updateDisplayName(trimmed);
       setOriginalName(trimmed);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } finally {
       setIsSavingName(false);
     }
-  }, [name, originalName, completeOnboarding]);
+  }, [name, originalName, updateDisplayName]);
+
+  const handleSaveUsername = useCallback(async () => {
+    if (!usernameChanged || !usernameCanSubmit) return;
+    setUsernameError(null);
+    try {
+      setIsSavingUsername(true);
+      const result = await saveUsername(username);
+      if (!result.ok) {
+        setUsernameError(result.error);
+        return;
+      }
+      const normalized = username.trim().toLowerCase();
+      await AsyncStorage.setItem('selene_username', normalized);
+      setStoredUsername(normalized);
+      setOriginalUsername(normalized);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } finally {
+      setIsSavingUsername(false);
+    }
+  }, [username, usernameChanged, usernameCanSubmit, setStoredUsername]);
+
+  const handleCancelUsername = useCallback(() => {
+    setUsername(originalUsername || '');
+    setUsernameError(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [originalUsername]);
 
   const handleCancelName = useCallback(() => {
     setName(originalName || '');
@@ -101,10 +139,14 @@ export default function SettingsScreen() {
   }, [loadPreferences]);
 
   useEffect(() => {
-    // Keep local name state in sync if store value changes (e.g. from onboarding)
     setName(userName);
     setOriginalName(userName);
   }, [userName]);
+
+  useEffect(() => {
+    setUsername(storedUsername);
+    setOriginalUsername(storedUsername);
+  }, [storedUsername]);
 
   const refreshSystemNotificationPermissions = useCallback(async () => {
     try {
@@ -201,6 +243,67 @@ export default function SettingsScreen() {
             </Pressable>
             <Text style={styles.heading}>Settings</Text>
             <View style={{ width: 20 }} />
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.subheading}>Username</Text>
+            <Text style={styles.subtitle}>
+              Your public handle in Community. Must be unique.
+            </Text>
+            <View style={styles.usernameFieldWrap}>
+              <UsernameField
+                value={username}
+                onChangeText={(text) => {
+                  setUsername(text);
+                  setUsernameError(null);
+                }}
+                status={usernameChanged ? usernameStatus : 'idle'}
+                message={usernameChanged ? usernameMessage : null}
+                testID="settings-username-input"
+              />
+            </View>
+            {usernameError ? (
+              <Text style={styles.usernameErrorText}>{usernameError}</Text>
+            ) : null}
+            <View style={styles.nameActionsRow}>
+              <Pressable
+                onPress={handleCancelUsername}
+                disabled={!usernameChanged}
+                style={({ pressed }) => [
+                  styles.nameSecondaryButton,
+                  pressed && usernameChanged && styles.nameSecondaryButtonPressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.nameSecondaryText,
+                    !usernameChanged && styles.nameDisabledText,
+                  ]}
+                >
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSaveUsername}
+                disabled={
+                  isSavingUsername ||
+                  !usernameChanged ||
+                  !usernameCanSubmit
+                }
+                style={({ pressed }) => [
+                  styles.namePrimaryButton,
+                  pressed &&
+                    !isSavingUsername &&
+                    usernameChanged &&
+                    usernameCanSubmit &&
+                    styles.namePrimaryButtonPressed,
+                ]}
+              >
+                <Text style={styles.namePrimaryText}>
+                  {isSavingUsername ? 'Saving…' : 'Save'}
+                </Text>
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.section}>
@@ -477,6 +580,14 @@ const styles = StyleSheet.create({
   labelSub: {
     fontSize: 13,
     color: Colors.textMuted,
+  },
+  usernameFieldWrap: {
+    marginTop: 4,
+  },
+  usernameErrorText: {
+    fontSize: 13,
+    color: '#E57373',
+    marginTop: 4,
   },
   nameActionsRow: {
     flexDirection: 'row',

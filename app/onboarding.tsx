@@ -1,5 +1,16 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  Pressable,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Alert,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Moon, ArrowRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -7,16 +18,30 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useOnboardingStore } from '@/stores/onboardingStore';
+import { UsernameField } from '@/components/UsernameField';
+import { useUsernameAvailability } from '@/lib/hooks/useUsernameAvailability';
 
 export default function OnboardingScreen() {
-  const [name, setName] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { completeOnboarding } = useOnboardingStore();
+  const { completeOnboarding, hasUsername, username: storedUsername } = useOnboardingStore();
+  const needsUsernameStep = !hasUsername;
+  const { status, message, canSubmit } = useUsernameAvailability(username, {
+    excludeCurrentUser: hasUsername,
+  });
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const moonAnim = useRef(new Animated.Value(0)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
+
+  React.useEffect(() => {
+    if (storedUsername) {
+      setUsername(storedUsername);
+    }
+  }, [storedUsername]);
 
   React.useEffect(() => {
     Animated.parallel([
@@ -26,17 +51,30 @@ export default function OnboardingScreen() {
         Animated.sequence([
           Animated.timing(moonAnim, { toValue: 1, duration: 3000, useNativeDriver: true }),
           Animated.timing(moonAnim, { toValue: 0, duration: 3000, useNativeDriver: true }),
-        ])
+        ]),
       ),
     ]).start();
   }, []);
 
+  const usernameReady = needsUsernameStep ? canSubmit : username.trim().length > 0;
+  const canContinue = usernameReady && !isSubmitting;
+
   const handleContinue = useCallback(async () => {
+    if (!usernameReady) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const trimmedName = name.trim() || 'Friend';
-    await completeOnboarding(trimmedName);
+    setIsSubmitting(true);
+    const trimmedDisplay = displayName.trim() || 'Friend';
+    const finalUsername = needsUsernameStep ? username : storedUsername || username;
+    const result = await completeOnboarding(trimmedDisplay, finalUsername);
+    setIsSubmitting(false);
+
+    if (!result.ok) {
+      Alert.alert('Username unavailable', result.error);
+      return;
+    }
+
     router.replace('/(tabs)/(home)');
-  }, [name, completeOnboarding, router]);
+  }, [usernameReady, displayName, username, storedUsername, needsUsernameStep, completeOnboarding, router]);
 
   const moonTranslateY = moonAnim.interpolate({
     inputRange: [0, 1],
@@ -68,27 +106,41 @@ export default function OnboardingScreen() {
           </Animated.View>
 
           <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-            <View style={styles.nameSection}>
-              <Text style={styles.question}>What should we call you?</Text>
-              <Text style={styles.questionSubtitle}>Just your first name is perfect.</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Your name"
-                placeholderTextColor={Colors.textMuted}
-                value={name}
-                onChangeText={setName}
-                returnKeyType="done"
-                onSubmitEditing={handleContinue}
-                autoCapitalize="words"
-                testID="onboarding-name-input"
-              />
+            <View style={styles.section}>
+              {needsUsernameStep ? (
+                <UsernameField
+                  value={username}
+                  onChangeText={setUsername}
+                  status={status}
+                  message={message}
+                  testID="onboarding-username-input"
+                  autoFocus
+                />
+              ) : null}
+
+              <View style={styles.displaySection}>
+                <Text style={styles.question}>What should we call you?</Text>
+                <Text style={styles.questionSubtitle}>Shown on Home — not your public handle.</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Your first name"
+                  placeholderTextColor={Colors.textMuted}
+                  value={displayName}
+                  onChangeText={setDisplayName}
+                  returnKeyType="done"
+                  autoCapitalize="words"
+                  testID="onboarding-name-input"
+                />
+              </View>
             </View>
           </Animated.View>
 
           <Animated.View style={[styles.footer, { opacity: fadeAnim }]}>
             <Pressable
               onPress={handleContinue}
+              disabled={!canContinue}
               onPressIn={() => {
+                if (!canContinue) return;
                 Animated.spring(buttonScale, { toValue: 0.95, useNativeDriver: true }).start();
               }}
               onPressOut={() => {
@@ -96,8 +148,14 @@ export default function OnboardingScreen() {
               }}
               testID="onboarding-continue-button"
             >
-              <Animated.View style={[styles.button, { transform: [{ scale: buttonScale }] }]}>
-                <Text style={styles.buttonText}>Enter Selene</Text>
+              <Animated.View
+                style={[
+                  styles.button,
+                  { transform: [{ scale: buttonScale }] },
+                  !canContinue && styles.buttonDisabled,
+                ]}
+              >
+                <Text style={styles.buttonText}>{isSubmitting ? 'Saving…' : 'Enter Selene'}</Text>
                 <ArrowRight size={18} color={Colors.background} />
               </Animated.View>
             </Pressable>
@@ -143,46 +201,25 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
-  brand: {
-    fontSize: 52,
-    fontWeight: '300' as const,
-    color: Colors.text,
-    letterSpacing: 6,
-    textAlign: 'center',
-    marginBottom: 24,
+  section: {
+    gap: 32,
+    marginTop: 24,
   },
-  tagline: {
+  displaySection: {
+    gap: 8,
+  },
+  question: {
     fontSize: 22,
     fontWeight: '400' as const,
     color: Colors.text,
     textAlign: 'center',
-    lineHeight: 32,
-    marginBottom: 20,
-    letterSpacing: 0.3,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: 10,
-  },
-  question: {
-    fontSize: 28,
-    fontWeight: '400' as const,
-    color: Colors.text,
-    textAlign: 'center',
-    marginBottom: 8,
     letterSpacing: 0.3,
   },
   questionSubtitle: {
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
-  },
-  nameSection: {
-    marginTop: 40,
+    marginBottom: 8,
   },
   input: {
     backgroundColor: Colors.surface,
@@ -203,6 +240,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.45,
   },
   buttonText: {
     fontSize: 17,
