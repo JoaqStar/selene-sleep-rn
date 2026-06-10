@@ -34,6 +34,7 @@ export interface Article {
   sources?: ArticleSource[] | null;
   created_at?: string;
   readTime?: string;
+  stream_message_id?: string | null;
 }
 
 export interface Comment {

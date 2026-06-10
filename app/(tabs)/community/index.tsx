@@ -13,7 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Users, MessageCircle, Plus, Pencil, ThumbsUp, X } from 'lucide-react-native';
+import { Users, MessageCircle, Plus, Pencil, ThumbsUp, X, BookOpen } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -30,6 +30,12 @@ import { hasSupabaseConfig, supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import TagPillSlider from '@/components/TagPillSlider';
 
+interface ArticlePostData {
+  articleId: string;
+  title: string;
+  standfirst: string;
+}
+
 interface StreamFeedMessage {
   id: string;
   text: string;
@@ -43,6 +49,7 @@ interface StreamFeedMessage {
   reply_count?: number;
   tag: string;
   tags: string[];
+  articlePost?: ArticlePostData;
 }
 
 type CommunityTagStat = {
@@ -267,6 +274,10 @@ export default function CommunityScreen() {
     });
   }, [router]);
 
+  const handleOpenArticle = useCallback((articleId: string) => {
+    router.push(`/community/article/${articleId}`);
+  }, [router]);
+
   const handleLikeToggle = useCallback(async (messageId: string, hasLiked: boolean) => {
     const uid = session?.user?.id;
     const channel = channelRef.current;
@@ -473,6 +484,8 @@ export default function CommunityScreen() {
   }, [handleSelectComposerAuto, handleToggleComposerPresetTag]);
 
   const openComposerForEdit = useCallback((item: StreamFeedMessage) => {
+    if (item.articlePost) return;
+
     const presetOptionsMap = new Map(composerTopTagOptions.map((option) => [option.toLowerCase(), option]));
     const presetTags: string[] = [];
     const customTags: string[] = [];
@@ -500,6 +513,8 @@ export default function CommunityScreen() {
     const isOwnPost = item.user?.id === currentUserId;
     const likeCount = item.reaction_counts?.like ?? 0;
     const hasLiked = item.own_reactions?.some((reaction) => reaction.type === 'like') ?? false;
+    const articlePost = item.articlePost;
+
     return (
       <View style={styles.postCard}>
         <View style={styles.postHeader}>
@@ -515,7 +530,7 @@ export default function CommunityScreen() {
                 </View>
               ))}
             </View>
-            {isOwnPost && (
+            {isOwnPost && !articlePost && (
               <Pressable
                 onPress={() => openComposerForEdit(item)}
                 style={styles.iconAction}
@@ -527,7 +542,28 @@ export default function CommunityScreen() {
           </View>
         </View>
 
-        <Text style={styles.postBody}>{item.text}</Text>
+        {articlePost ? (
+          <Pressable
+            onPress={() => handleOpenArticle(articlePost.articleId)}
+            style={({ pressed }) => [
+              styles.articlePreviewCard,
+              pressed && styles.articlePreviewCardPressed,
+            ]}
+          >
+            <View style={styles.articlePreviewBadge}>
+              <BookOpen size={11} color={Colors.accent} />
+              <Text style={styles.articlePreviewBadgeText}>Article</Text>
+            </View>
+            <Text style={styles.articlePreviewTitle}>{articlePost.title}</Text>
+            {articlePost.standfirst ? (
+              <Text style={styles.articlePreviewStandfirst} numberOfLines={3}>
+                {articlePost.standfirst}
+              </Text>
+            ) : null}
+          </Pressable>
+        ) : (
+          <Text style={styles.postBody}>{item.text}</Text>
+        )}
 
         <View style={styles.postActions}>
           <Pressable onPress={() => handleLikeToggle(item.id, hasLiked)} style={styles.actionButton} hitSlop={8}>
@@ -549,7 +585,7 @@ export default function CommunityScreen() {
         </View>
       </View>
     );
-  }, [handleLikeToggle, handleOpenThread, openComposerForEdit, session?.user?.id]);
+  }, [handleLikeToggle, handleOpenArticle, handleOpenThread, openComposerForEdit, session?.user?.id]);
 
   if (error) {
     return (
@@ -741,6 +777,37 @@ export default function CommunityScreen() {
   );
 }
 
+function getMessageCustomData(message: any): Record<string, unknown> | undefined {
+  if (message?.customData && typeof message.customData === 'object') {
+    return message.customData as Record<string, unknown>;
+  }
+  if (message?.custom && typeof message.custom === 'object') {
+    return message.custom as Record<string, unknown>;
+  }
+  return undefined;
+}
+
+function parseArticlePost(message: any, previous?: StreamFeedMessage): ArticlePostData | undefined {
+  const customData = getMessageCustomData(message);
+  if (customData?.type !== 'article_post') {
+    return previous?.articlePost;
+  }
+
+  const articleId = String(customData.article_id ?? '').trim();
+  if (!articleId) {
+    return previous?.articlePost;
+  }
+
+  const title = String(customData.title ?? message.text ?? previous?.articlePost?.title ?? '').trim();
+  const standfirst = String(customData.standfirst ?? previous?.articlePost?.standfirst ?? '').trim();
+
+  return {
+    articleId,
+    title: title || 'Article',
+    standfirst,
+  };
+}
+
 function mapStreamMessage(message: any, previous?: StreamFeedMessage): StreamFeedMessage {
   const rawTagsArray = Array.isArray(message.tags)
     ? message.tags
@@ -768,6 +835,8 @@ function mapStreamMessage(message: any, previous?: StreamFeedMessage): StreamFee
     possibleTag ?? '',
   ]);
 
+  const articlePost = parseArticlePost(message, previous);
+
   const mapped: StreamFeedMessage = {
     id: message.id,
     text: typeof message.text === 'string' ? message.text : (previous?.text ?? ''),
@@ -778,9 +847,10 @@ function mapStreamMessage(message: any, previous?: StreamFeedMessage): StreamFee
     reply_count: message.reply_count ?? 0,
     tag: mergedTags[0] ?? 'General',
     tags: mergedTags.length > 0 ? mergedTags : ['General'],
+    articlePost,
   };
 
-  if (!mapped.text) {
+  if (!mapped.text && !mapped.articlePost) {
     console.warn('[DebugCommunity] mapStreamMessage produced empty text', {
       id: mapped.id,
       incomingHasTextField: typeof message.text === 'string',
@@ -869,9 +939,10 @@ function upsertAndSortMessages(messages: StreamFeedMessage[], next: StreamFeedMe
         reply_count: next.reply_count ?? existing.reply_count,
         tags: next.tags.length > 0 ? next.tags : existing.tags,
         tag: next.tag || existing.tag,
+        articlePost: next.articlePost ?? existing.articlePost,
       }
     : next;
-  if (!merged.text) {
+  if (!merged.text && !merged.articlePost) {
     console.warn('[DebugCommunity] upsertAndSortMessages merged empty text', {
       id: merged.id,
       incomingTextLength: next.text.length,
@@ -1057,6 +1128,45 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     marginTop: 10,
+  },
+  articlePreviewCard: {
+    marginTop: 10,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+  },
+  articlePreviewCardPressed: {
+    opacity: 0.85,
+  },
+  articlePreviewBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.accentDim,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    gap: 5,
+    marginBottom: 10,
+  },
+  articlePreviewBadgeText: {
+    fontSize: 11,
+    color: Colors.accent,
+    fontWeight: '600' as const,
+  },
+  articlePreviewTitle: {
+    fontSize: 17,
+    fontWeight: '700' as const,
+    color: Colors.text,
+    lineHeight: 24,
+    marginBottom: 6,
+  },
+  articlePreviewStandfirst: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    lineHeight: 20,
   },
   postActions: {
     flexDirection: 'row',

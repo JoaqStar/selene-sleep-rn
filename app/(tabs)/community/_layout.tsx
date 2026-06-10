@@ -14,6 +14,7 @@ export default function CommunityLayout() {
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="thread" options={{ headerShown: false }} />
+      <Stack.Screen name="article/[articleId]" options={{ headerShown: false }} />
     </Stack>
   );
 }

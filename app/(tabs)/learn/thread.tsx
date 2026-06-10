@@ -2,18 +2,14 @@ import React from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { CommunityThreadView } from '@/components/CommunityThreadView';
 
-export default function CommunityThreadScreen() {
-  const { messageId, channelId, backLabel } = useLocalSearchParams<{
-    messageId: string;
-    channelId: string;
-    backLabel?: string;
-  }>();
+export default function LearnThreadScreen() {
+  const { messageId, channelId } = useLocalSearchParams<{ messageId: string; channelId: string }>();
 
   return (
     <CommunityThreadView
       messageId={String(messageId ?? '')}
       channelId={channelId}
-      backLabel={backLabel?.trim() || 'Community'}
+      backLabel="Article"
     />
   );
 }
