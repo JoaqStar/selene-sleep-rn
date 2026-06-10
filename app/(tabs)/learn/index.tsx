@@ -10,13 +10,7 @@ import { Article } from '@/types';
 import ArticleCard from '@/components/ArticleCard';
 import TagPillSlider from '@/components/TagPillSlider';
 import { supabase } from '@/lib/supabase';
-
-const CATEGORY_FILTERS = [
-  { label: 'All', value: null },
-  { label: 'Understanding your body', value: 'understanding-your-body' },
-  { label: 'Sleep science', value: 'sleep-science' },
-  { label: 'Symptom support', value: 'symptom-support' },
-] as const;
+import { ARTICLE_CATEGORY_FILTERS } from '@/lib/utils/articleCategories';
 
 export default function LearnScreen() {
   const insets = useSafeAreaInsets();
@@ -27,7 +21,7 @@ export default function LearnScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const articles = data ?? [];
-  const activeFilter = CATEGORY_FILTERS.find((c) => c.label === activeCategory);
+  const activeFilter = ARTICLE_CATEGORY_FILTERS.find((c) => c.label === activeCategory);
   const filteredArticles =
     !activeFilter || !activeFilter.value
       ? articles
@@ -99,7 +93,7 @@ export default function LearnScreen() {
 
         <Animated.View style={{ opacity: fadeAnim }}>
           <TagPillSlider
-            options={CATEGORY_FILTERS.map((cat) => cat.label)}
+            options={ARTICLE_CATEGORY_FILTERS.map((cat) => cat.label)}
             selectedValues={[activeCategory]}
             onPressOption={setActiveCategory}
             testIDPrefix="learn-category"

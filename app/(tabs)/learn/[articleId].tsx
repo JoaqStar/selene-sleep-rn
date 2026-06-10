@@ -11,6 +11,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { isSeleneAuthor } from '@/lib/utils/articleAuthor';
 import { formatSourceMeta, parseArticleSources } from '@/lib/utils/articleSources';
 import { openInAppBrowser } from '@/lib/utils/inAppBrowser';
+import { getArticleCategoryLabel } from '@/lib/utils/articleCategories';
 
 export default function ArticleDetailScreen() {
   const { articleId } = useLocalSearchParams<{ articleId: string }>();
@@ -67,7 +68,7 @@ export default function ArticleDetailScreen() {
         <View style={styles.metaRow}>
           <View style={styles.categoryBadge}>
             <BookOpen size={11} color={Colors.accent} />
-            <Text style={styles.categoryText}>{article.category}</Text>
+            <Text style={styles.categoryText}>{getArticleCategoryLabel(article.category)}</Text>
           </View>
           {article.readTime ? (
             <View style={styles.readTimeRow}>

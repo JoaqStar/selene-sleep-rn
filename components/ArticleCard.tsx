@@ -4,6 +4,7 @@ import { BookOpen, Clock, ChevronRight } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { Article } from '@/types';
 import { isSeleneAuthor } from '@/lib/utils/articleAuthor';
+import { getArticleCategoryLabel } from '@/lib/utils/articleCategories';
 
 interface ArticleCardProps {
   article: Article;
@@ -43,7 +44,7 @@ export default React.memo(function ArticleCard({ article, onPress }: ArticleCard
           <View style={styles.topRow}>
             <View style={styles.categoryBadge}>
               <BookOpen size={11} color={Colors.accent} />
-              <Text style={styles.categoryText}>{article.category}</Text>
+              <Text style={styles.categoryText}>{getArticleCategoryLabel(article.category)}</Text>
             </View>
             <View style={styles.metaRow}>
               <Clock size={11} color={Colors.textMuted} />
