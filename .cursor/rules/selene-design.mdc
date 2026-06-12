@@ -1,0 +1,73 @@
+---
+description: Selene design system — brand, voice, and visual rules for the menopause app (React Native / Expo). Apply to all UI work.
+globs:
+  - "**/*.tsx"
+  - "**/*.ts"
+alwaysApply: true
+---
+
+# Selene — design rules
+
+Selene is a menopause companion app for women in midlife. Three features:
+**audio sleep meditations**, **articles** (menopause news + science), and a
+**community** (post / like / comment). The redesign goal: **less text, more
+imagery** — calm, editorial, photo-led. Reference: the Selene design system
+(`theme.ts` + docs/selene-redesign/).
+
+## Use the tokens
+Always import from `constants/theme.ts` — never hardcode hex, spacing, or font
+sizes. `palette`, `gradients`, `spacing`, `radius`, `type`, `elevation`,
+`imageTreatment`, `motion`.
+
+## Voice & copy
+- Warm, calm, plain-spoken, second person ("your nights", "we've got you").
+  Never clinical or alarmist. Reassure, don't diagnose.
+- Sentence case for UI. Short. One idea per line. Titles can be evocative
+  ("Evening Wind-Down", "Soften Into Sleep", "Why You Wake at 3am").
+- No emoji. No exclamation-heavy hype.
+
+## Visual foundations
+- **Dark-mode only.** Midnight-navy canvas (`palette.background`), one warm
+  gold accent (`palette.accent`) — the moon. Gold is for emphasis, play
+  buttons, active states, links. Don't introduce new hues.
+- **Depth = layered navy + 1px translucent-white hairlines**, NOT drop
+  shadows. The only shadows: the compose FAB and the moon glow on the player.
+- **Soft corners:** 14–16px cards, fully-round (`radius.full`) avatars, pills,
+  icon circles, FAB.
+- **Editorial serif** (`type.hero/display/titleSerif`, Newsreader Light) for
+  screen titles, hero greetings, and text over photos. System sans for all
+  functional UI and body copy.
+- **Icons: lucide** (`lucide-react-native`) — already a dependency. Stroke
+  icons; fill only for play/pause/heart-active. ~2px stroke. Never emoji or
+  ad-hoc SVG.
+
+## Imagery — the redesign's core move
+- Lead screens and key cards with **a photograph**, not a wall of text.
+- Every photo gets the **dusk treatment** (`imageTreatment`): the `<Image>`,
+  a navy wash (`navyWash`), then a protection gradient (`scrim.hero` for
+  full-bleed heros, `scrim.card` for cards) so white serif titles sit on top.
+  See docs/selene-redesign/photo-treatment.md for the exact layer recipe.
+- Photos are warm/calm, women-centred, midlife-appropriate. Current images in
+  mockups are royalty-free placeholders → replace with licensed/commissioned.
+
+## Interaction
+- Press feedback: scale to `motion.pressScale` (cards) / `motion.iconPressScale`
+  (icon buttons), ~200ms, soft easing. No bounce on content.
+- Like = gold-pink heart fill (`palette.like`). Active tab = gold.
+- Bottom tab bar: Home (Moon), Sleep (CloudMoon), Learn (BookOpen),
+  Community (Users).
+
+## Layout patterns (see per-screen specs)
+- Screen hero: full-bleed photo (~250–384px) + `scrim.hero`, gold Moon glyph
+  top-left, action icon top-right, serif title bottom-left.
+- Featured card: large photo card (~224–252px) with eyebrow + serif title +
+  meta + a gold action (play, or "Read article →").
+- Lists: ArticleCard (image-forward; supports NO-image text-only variant),
+  SessionCard / session row with a "More info" → detail screen, CommunityPostCard.
+- Article & Session **detail screens**: photo hero (or text header if no image)
+  + Back button + body; session detail ends in a full-width "Play session" CTA.
+
+## Don'ts
+- No bluish-purple SaaS gradients, no emoji cards, no left-border-accent cards.
+- Don't crowd screens with text or stats. One thousand no's for every yes.
+- Don't invent components that fight the system — compose the existing ones.

@@ -1,10 +1,12 @@
 import React, { useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated, Image } from 'react-native';
-import { BookOpen, Clock, ChevronRight } from 'lucide-react-native';
-import Colors from '@/constants/colors';
+import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
+import { Clock } from 'lucide-react-native';
 import { Article } from '@/types';
 import { isSeleneAuthor } from '@/lib/utils/articleAuthor';
 import { getArticleCategoryLabel } from '@/lib/utils/articleCategories';
+import { Photo } from '@/components/Photo';
+import { Badge } from '@/components/Badge';
+import { motion, palette, radius, spacing, type } from '@/constants/theme';
 
 interface ArticleCardProps {
   article: Article;
@@ -13,9 +15,12 @@ interface ArticleCardProps {
 
 export default React.memo(function ArticleCard({ article, onPress }: ArticleCardProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const imageUrl = article.image_url?.trim();
+  const seleneAuthor = isSeleneAuthor(article.author);
+  const hasImage = Boolean(imageUrl);
 
   const handlePressIn = useCallback(() => {
-    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true }).start();
+    Animated.spring(scaleAnim, { toValue: motion.pressScale, useNativeDriver: true }).start();
   }, [scaleAnim]);
 
   const handlePressOut = useCallback(() => {
@@ -26,9 +31,6 @@ export default React.memo(function ArticleCard({ article, onPress }: ArticleCard
     onPress(article);
   }, [onPress, article]);
 
-  const imageUrl = article.image_url?.trim();
-  const seleneAuthor = isSeleneAuthor(article.author);
-
   return (
     <Animated.View style={[{ transform: [{ scale: scaleAnim }] }]}>
       <Pressable
@@ -38,24 +40,32 @@ export default React.memo(function ArticleCard({ article, onPress }: ArticleCard
         testID={`article-card-${article.id}`}
       >
         <View style={styles.card}>
-          {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
+          {hasImage ? (
+            <View style={styles.imageBlock}>
+              <Photo source={{ uri: imageUrl! }} variant="card" />
+              <View style={styles.badgeOnImage}>
+                <Badge label={getArticleCategoryLabel(article.category)} />
+              </View>
+            </View>
           ) : null}
-          <View style={styles.topRow}>
-            <View style={styles.categoryBadge}>
-              <BookOpen size={11} color={Colors.accent} />
-              <Text style={styles.categoryText}>{getArticleCategoryLabel(article.category)}</Text>
+
+          <View style={styles.textBlock}>
+            {!hasImage ? (
+              <Badge label={getArticleCategoryLabel(article.category)} />
+            ) : null}
+            <Text style={type.cardTitle} numberOfLines={2}>{article.title}</Text>
+            <Text style={styles.standfirst} numberOfLines={2}>{article.standfirst}</Text>
+            <View style={styles.footer}>
+              <Text style={[styles.author, seleneAuthor && styles.authorSelene]}>
+                {article.author}
+              </Text>
+              {article.readTime ? (
+                <View style={styles.readTimeRow}>
+                  <Clock size={11} color={palette.textMuted} />
+                  <Text style={styles.readTime}>{article.readTime}</Text>
+                </View>
+              ) : null}
             </View>
-            <View style={styles.metaRow}>
-              <Clock size={11} color={Colors.textMuted} />
-              {article.readTime ? <Text style={styles.readTime}>{article.readTime}</Text> : null}
-            </View>
-          </View>
-          <Text style={styles.title} numberOfLines={2}>{article.title}</Text>
-          <Text style={styles.standfirst} numberOfLines={2}>{article.standfirst}</Text>
-          <View style={styles.bottomRow}>
-            <Text style={[styles.voice, seleneAuthor && styles.voiceSelene]}>{article.author}</Text>
-            <ChevronRight size={16} color={Colors.textMuted} />
           </View>
         </View>
       </Pressable>
@@ -65,76 +75,52 @@ export default React.memo(function ArticleCard({ article, onPress }: ArticleCard
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.cardBackground,
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 12,
+    backgroundColor: palette.cardBackground,
+    borderRadius: radius.lg,
+    marginBottom: spacing.md,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: palette.border,
     overflow: 'hidden',
   },
-  heroImage: {
-    width: '100%',
-    height: 140,
-    borderRadius: 10,
-    marginBottom: 12,
+  imageBlock: {
+    height: 168,
+    position: 'relative',
   },
-  topRow: {
+  badgeOnImage: {
+    position: 'absolute',
+    left: spacing.md,
+    bottom: spacing.md,
+  },
+  textBlock: {
+    padding: spacing.cardPadding,
+    gap: spacing.sm,
+  },
+  standfirst: {
+    ...type.base,
+    color: palette.textSecondary,
+  },
+  footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginTop: spacing.sm,
   },
-  categoryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.accentDim,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    gap: 5,
+  author: {
+    fontSize: 12,
+    color: palette.accent,
+    fontWeight: '500',
+    flex: 1,
   },
-  categoryText: {
-    fontSize: 11,
-    color: Colors.accent,
-    fontWeight: '600' as const,
+  authorSelene: {
+    fontWeight: '600',
   },
-  metaRow: {
+  readTimeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
   readTime: {
     fontSize: 12,
-    color: Colors.textMuted,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    letterSpacing: 0.2,
-    marginBottom: 6,
-    lineHeight: 24,
-  },
-  standfirst: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  bottomRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  voice: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    fontStyle: 'italic' as const,
-  },
-  voiceSelene: {
-    color: Colors.accent,
-    fontStyle: 'normal' as const,
-    fontWeight: '600' as const,
+    color: palette.textMuted,
   },
 });

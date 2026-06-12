@@ -5,21 +5,25 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Image,
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Clock, Play, BookOpen } from 'lucide-react-native';
+import { ArrowLeft, Clock, Play, Bookmark } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useArticles } from '@/lib/hooks/useArticlesQuery';
 import { useSessions } from '@/lib/hooks/useSessionsQuery';
 import { usePlayerStore } from '@/stores/playerStore';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { isSeleneAuthor } from '@/lib/utils/articleAuthor';
+import { Photo } from '@/components/Photo';
+import { Badge } from '@/components/Badge';
+import { Avatar } from '@/components/Avatar';
+import { heroImages } from '@/lib/utils/imageAssets';
 import { formatSourceMeta, parseArticleSources } from '@/lib/utils/articleSources';
 import { openInAppBrowser } from '@/lib/utils/inAppBrowser';
 import { getArticleCategoryLabel } from '@/lib/utils/articleCategories';
+import { gradients, palette, spacing, type } from '@/constants/theme';
 import {
   ArticleCommunityEngagement,
   ArticleDiscussionStack,
@@ -33,6 +37,7 @@ type ArticleDetailViewProps = {
 
 export function ArticleDetailView({ articleId, backLabel, discussionStack }: ArticleDetailViewProps) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { setCurrentSession } = usePlayerStore();
   const { data: articles, isLoading, isFetched } = useArticles();
   const isArticlesLoading = isLoading || !isFetched;
@@ -97,49 +102,62 @@ export function ArticleDetailView({ articleId, backLabel, discussionStack }: Art
   const paragraphs = article.body.split('\n\n');
   const imageUrl = article.image_url?.trim();
   const articleSources = parseArticleSources(article.sources);
-  const seleneAuthor = isSeleneAuthor(article.author);
+  const categoryLabel = getArticleCategoryLabel(article.category);
+  const dateLabel = article.created_at
+    ? new Date(article.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+    : '';
+  const bylineMeta = [dateLabel, article.readTime].filter(Boolean).join(' · ');
 
   return (
-    <LinearGradient
-      colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
-      style={styles.container}
-    >
+    <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 60 }}
         showsVerticalScrollIndicator={false}
       >
-        <ScreenHeader title="Article" backLabel={backLabel} />
-        <View style={styles.metaRow}>
-          <View style={styles.categoryBadge}>
-            <BookOpen size={11} color={Colors.accent} />
-            <Text style={styles.categoryText}>{getArticleCategoryLabel(article.category)}</Text>
-          </View>
-          {article.readTime ? (
-            <View style={styles.readTimeRow}>
-              <Clock size={12} color={Colors.textMuted} />
-              <Text style={styles.readTime}>{article.readTime}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        <Text style={styles.title}>{article.title}</Text>
-        <Text style={styles.standfirst}>{article.standfirst}</Text>
-
-        <View style={[styles.voiceBadge, seleneAuthor && styles.voiceBadgeSelene]}>
-          <Text style={[styles.voiceText, seleneAuthor && styles.voiceTextSelene]}>
-            {article.author}
-          </Text>
-        </View>
-
         {imageUrl ? (
-          <Image source={{ uri: imageUrl }} style={styles.heroImage} resizeMode="cover" />
-        ) : null}
+          <View style={styles.hero}>
+            <Photo source={{ uri: imageUrl }} variant="hero" />
+            <Pressable
+              onPress={() => router.back()}
+              style={[styles.backButton, { top: insets.top + spacing.md }]}
+              hitSlop={12}
+            >
+              <ArrowLeft size={20} color={palette.text} />
+            </Pressable>
+            <View style={styles.heroOverlay}>
+              <Badge label={categoryLabel} />
+              <Text style={type.titleSerif}>{article.title}</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={[styles.textHeader, { paddingTop: insets.top + spacing.md }]}>
+            <Pressable onPress={() => router.back()} style={styles.backButtonInline} hitSlop={12}>
+              <ArrowLeft size={20} color={palette.text} />
+              <Text style={styles.backLabel}>{backLabel}</Text>
+            </Pressable>
+            <Badge label={categoryLabel} />
+            <Text style={type.titleSerif}>{article.title}</Text>
+            <Text style={styles.standfirst}>{article.standfirst}</Text>
+          </View>
+        )}
 
-        <View style={styles.divider} />
+        <View style={styles.body}>
+          <View style={styles.bylineRow}>
+            <Avatar name={article.author} size={36} />
+            <View style={styles.bylineText}>
+              <Text style={styles.authorName}>{article.author}</Text>
+              {bylineMeta ? <Text style={styles.bylineMeta}>{bylineMeta}</Text> : null}
+            </View>
+            <Bookmark size={20} color={palette.textMuted} />
+          </View>
 
-        {paragraphs.map((para, idx) => (
-          <Text key={idx} style={styles.bodyText}>{para}</Text>
-        ))}
+          {imageUrl ? <Text style={styles.standfirst}>{article.standfirst}</Text> : null}
+
+          <View style={styles.divider} />
+
+          {paragraphs.map((para, idx) => (
+            <Text key={idx} style={type.body}>{para}</Text>
+          ))}
 
         {articleSources.length > 0 ? (
           <View style={styles.sourcesSection}>
@@ -198,24 +216,84 @@ export function ArticleDetailView({ articleId, backLabel, discussionStack }: Art
             discussionStack={discussionStack}
           />
         ) : null}
+        </View>
       </ScrollView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: palette.background,
   },
   stateContent: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.screenGutter,
     paddingTop: 16,
   },
-  content: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 60,
+  hero: {
+    height: 280,
+    position: 'relative',
+  },
+  backButton: {
+    position: 'absolute',
+    left: spacing.screenGutter,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(11,14,26,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  backButtonInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  backLabel: {
+    fontSize: 15,
+    color: palette.textSecondary,
+  },
+  heroOverlay: {
+    position: 'absolute',
+    left: spacing.screenGutter,
+    right: spacing.screenGutter,
+    bottom: spacing['2xl'],
+    gap: spacing.sm,
+    zIndex: 2,
+  },
+  textHeader: {
+    paddingHorizontal: spacing.screenGutter,
+    gap: spacing.md,
+  },
+  body: {
+    paddingHorizontal: spacing.screenGutter,
+    paddingTop: spacing['2xl'],
+    gap: spacing.lg,
+  },
+  bylineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingBottom: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+  },
+  bylineText: {
+    flex: 1,
+  },
+  authorName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: palette.text,
+  },
+  bylineMeta: {
+    fontSize: 12,
+    color: palette.textMuted,
+    marginTop: 2,
   },
   loadingContainer: {
     flex: 1,
@@ -232,89 +310,14 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: 16,
   },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  categoryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.accentDim,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    gap: 5,
-  },
-  categoryText: {
-    fontSize: 11,
-    color: Colors.accent,
-    fontWeight: '600' as const,
-  },
-  readTimeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  readTime: {
-    fontSize: 12,
-    color: Colors.textMuted,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '400' as const,
-    color: Colors.text,
-    letterSpacing: 0.3,
-    lineHeight: 34,
-    marginBottom: 12,
-  },
   standfirst: {
     fontSize: 16,
-    color: Colors.accentLight,
+    color: palette.textSecondary,
     lineHeight: 24,
-    marginBottom: 12,
-    fontStyle: 'italic' as const,
-  },
-  voiceBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: Colors.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 16,
-    marginBottom: 16,
-  },
-  voiceBadgeSelene: {
-    backgroundColor: Colors.accentDim,
-    borderWidth: 1,
-    borderColor: 'rgba(201, 169, 110, 0.35)',
-  },
-  voiceText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  voiceTextSelene: {
-    color: Colors.accent,
-    fontWeight: '600' as const,
-  },
-  heroImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 14,
-    marginBottom: 20,
-    backgroundColor: Colors.surface,
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.border,
-    marginBottom: 20,
-  },
-  bodyText: {
-    fontSize: 16,
-    color: Colors.text,
-    lineHeight: 26,
-    marginBottom: 18,
-    letterSpacing: 0.2,
+    backgroundColor: palette.border,
   },
   sourcesSection: {
     marginTop: 4,

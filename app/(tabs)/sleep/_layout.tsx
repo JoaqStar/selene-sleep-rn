@@ -13,6 +13,7 @@ export default function SleepLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="[sessionId]" options={{ headerShown: false }} />
     </Stack>
   );
 }

@@ -1,62 +1,64 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
-import { Play, Clock } from 'lucide-react-native';
+import { Play, ChevronRight } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { ImageSource } from 'expo-image';
 import Colors from '@/constants/colors';
+import { motion, palette, radius, spacing, type } from '@/constants/theme';
 import { Session } from '@/types';
+import { getSessionInstructor } from '@/lib/utils/sessionCover';
+import { Photo } from '@/components/Photo';
 
 interface SessionCardProps {
   session: Session;
   onPress: (session: Session) => void;
-  compact?: boolean;
+  imageSource?: ImageSource;
+  variant?: 'row' | 'compact';
 }
 
-export default React.memo(function SessionCard({ session, onPress, compact = false }: SessionCardProps) {
+export default React.memo(function SessionCard({
+  session,
+  onPress,
+  imageSource,
+  variant = 'row',
+}: SessionCardProps) {
+  const router = useRouter();
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const instructor = getSessionInstructor(session);
+  const minutes = Math.round(session.duration_seconds / 60);
 
   const handlePressIn = useCallback(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.97,
-      useNativeDriver: true,
-    }).start();
+    Animated.spring(scaleAnim, { toValue: motion.pressScale, useNativeDriver: true }).start();
   }, [scaleAnim]);
 
   const handlePressOut = useCallback(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      friction: 3,
-      useNativeDriver: true,
-    }).start();
+    Animated.spring(scaleAnim, { toValue: 1, friction: 3, useNativeDriver: true }).start();
   }, [scaleAnim]);
 
-  const handlePress = useCallback(() => {
-    onPress(session);
-  }, [onPress, session]);
+  const handleMoreInfo = useCallback(() => {
+    router.push({
+      pathname: '/(tabs)/sleep/[sessionId]',
+      params: { sessionId: String(session.id) },
+    });
+  }, [router, session.id]);
 
-  if (compact) {
+  if (variant === 'compact') {
     return (
       <Animated.View style={[{ transform: [{ scale: scaleAnim }] }]}>
         <Pressable
-          onPress={handlePress}
+          onPress={() => onPress(session)}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
           testID={`session-card-${session.id}`}
         >
           <LinearGradient
             colors={[Colors.cardBackground, Colors.cardBackgroundLight]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
             style={styles.compactCard}
           >
-            <View style={styles.compactContent}>
-              <Text style={styles.compactTitle} numberOfLines={2}>{session.title}</Text>
-              {session.instructor ? <Text style={styles.instructor}>{session.instructor}</Text> : null}
-              <View style={styles.metaRow}>
-                <Clock size={12} color={Colors.textMuted} />
-                <Text style={styles.duration}>{Math.round(session.duration_seconds / 60)} min</Text>
-              </View>
-            </View>
+            <Text style={styles.compactTitle} numberOfLines={2}>{session.title}</Text>
+            {instructor ? <Text style={styles.instructor}>{instructor}</Text> : null}
+            <Text style={styles.duration}>{minutes} min</Text>
             <View style={styles.playButtonSmall}>
               <Play size={14} color={Colors.accent} fill={Colors.accent} />
             </View>
@@ -68,120 +70,96 @@ export default React.memo(function SessionCard({ session, onPress, compact = fal
 
   return (
     <Animated.View style={[{ transform: [{ scale: scaleAnim }] }]}>
-      <Pressable
-        onPress={handlePress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        testID={`session-card-${session.id}`}
-      >
-        <LinearGradient
-          colors={[Colors.cardBackground, Colors.cardBackgroundLight]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.card}
+      <View style={styles.rowCard}>
+        <View style={styles.thumb}>
+          {imageSource ? <Photo source={imageSource} variant="card" /> : null}
+        </View>
+        <View style={styles.middle}>
+          <Text style={type.cardTitle} numberOfLines={2}>{session.title}</Text>
+          <Text style={styles.metaGold}>
+            {[instructor, `${minutes} min`].filter(Boolean).join(' · ')}
+          </Text>
+          <Pressable onPress={handleMoreInfo} style={styles.moreInfoPill} hitSlop={8}>
+            <Text style={styles.moreInfoText}>More info</Text>
+            <ChevronRight size={12} color={palette.textMuted} />
+          </Pressable>
+        </View>
+        <Pressable
+          onPress={() => onPress(session)}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          style={styles.playButton}
+          testID={`session-play-${session.id}`}
         >
-          <View style={styles.cardContent}>
-            <View style={styles.textContent}>
-              <Text style={styles.title} numberOfLines={2}>{session.title}</Text>
-              {session.instructor ? <Text style={styles.instructor}>{session.instructor}</Text> : null}
-              {session.description ? (
-                <>
-                  <Text
-                    style={styles.description}
-                    numberOfLines={isDescriptionExpanded ? undefined : 2}
-                  >
-                    {session.description}
-                  </Text>
-                  {session.description.length > 110 && (
-                    <Pressable
-                      onPress={() => setIsDescriptionExpanded((prev) => !prev)}
-                      hitSlop={8}
-                    >
-                      <Text style={styles.moreLess}>
-                        {isDescriptionExpanded ? 'Show less' : 'Read more'}
-                      </Text>
-                    </Pressable>
-                  )}
-                </>
-              ) : null}
-            </View>
-            <View style={styles.rightSection}>
-              <View style={styles.metaRow}>
-                <Clock size={13} color={Colors.textMuted} />
-                <Text style={styles.duration}>{Math.round(session.duration_seconds / 60)} min</Text>
-              </View>
-              <View style={styles.playButton}>
-                <Play size={18} color={Colors.accent} fill={Colors.accent} />
-              </View>
-            </View>
-          </View>
-        </LinearGradient>
-      </Pressable>
+          <Play size={16} color={palette.accent} fill={palette.accent} />
+        </Pressable>
+      </View>
     </Animated.View>
   );
 });
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  cardContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  textContent: {
-    flex: 1,
-    marginRight: 12,
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    letterSpacing: 0.2,
-    marginBottom: 4,
-  },
-  instructor: {
-    fontSize: 13,
-    color: Colors.accent,
-    fontWeight: '500' as const,
-    marginBottom: 6,
-  },
-  description: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    lineHeight: 18,
-  },
-  moreLess: {
-    marginTop: 4,
-    fontSize: 12,
-    fontWeight: '500' as const,
-    color: Colors.accent,
-  },
-  rightSection: {
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-  },
-  metaRow: {
+  rowCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: palette.cardBackground,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    gap: spacing.md,
+  },
+  thumb: {
+    width: 76,
+    height: 76,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+    backgroundColor: palette.surface,
+  },
+  middle: {
+    flex: 1,
     gap: 4,
   },
-  duration: {
+  metaGold: {
+    fontSize: 13,
+    color: palette.accent,
+    fontWeight: '500',
+  },
+  moreInfoPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.borderLight,
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    gap: 2,
+    marginTop: 4,
+  },
+  moreInfoText: {
     fontSize: 12,
-    color: Colors.textMuted,
+    color: palette.textSecondary,
   },
   playButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: Colors.accentDim,
+    backgroundColor: palette.accentDim,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
+  },
+  instructor: {
+    fontSize: 13,
+    color: Colors.accent,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  duration: {
+    fontSize: 12,
+    color: Colors.textMuted,
   },
   playButtonSmall: {
     width: 34,
@@ -190,7 +168,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accentDim,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'absolute' as const,
+    position: 'absolute',
     bottom: 12,
     right: 12,
   },
@@ -203,12 +181,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  compactContent: {
-    flex: 1,
-  },
   compactTitle: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.text,
     letterSpacing: 0.2,
     marginBottom: 4,

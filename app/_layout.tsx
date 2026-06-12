@@ -3,6 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, Redirect, useSegments, useRootNavigationState } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
+import {
+  useFonts,
+  Newsreader_300Light,
+  Newsreader_400Regular,
+} from '@expo-google-fonts/newsreader';
 import React, { useEffect } from "react";
 import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -92,6 +97,10 @@ function RootLayoutNav() {
 export default function RootLayout() {
   const { isLoading } = useOnboardingStore();
   const { isLoading: isAuthLoading, initialize } = useAuthStore();
+  const [fontsLoaded] = useFonts({
+    Newsreader_300Light,
+    Newsreader_400Regular,
+  });
 
   useEffect(() => {
     console.log('[App] Boot: load onboarding state + auth');
@@ -112,14 +121,14 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (!isLoading && !isAuthLoading) {
+    if (!isLoading && !isAuthLoading && fontsLoaded) {
       SplashScreen.hideAsync().catch((error) => {
         console.warn('[App] SplashScreen.hideAsync failed:', error);
       });
     }
-  }, [isLoading, isAuthLoading]);
+  }, [isLoading, isAuthLoading, fontsLoaded]);
 
-  if (isLoading || isAuthLoading) {
+  if (isLoading || isAuthLoading || !fontsLoaded) {
     return (
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>

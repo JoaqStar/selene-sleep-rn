@@ -13,10 +13,17 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Users, MessageCircle, Plus, Pencil, ThumbsUp, X, BookOpen } from 'lucide-react-native';
+import { Search, Plus, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
+import { PhotoHero, PhotoHeroIconButton } from '@/components/PhotoHero';
+import { PhotoTile } from '@/components/PhotoTile';
+import { ChipRow } from '@/components/Chip';
+import { CommunityPostCard } from '@/components/CommunityPostCard';
+import { bundledHeroImages, MOCK_CIRCLES } from '@/lib/utils/imageAssets';
+import { elevation, palette, spacing, type } from '@/constants/theme';
+import TagPillSlider from '@/components/TagPillSlider';
 import { useStreamChat } from '@/lib/hooks/useStreamChat';
 import { useCommunityStore } from '@/stores/communityStore';
 import { COMMUNITY_CHANNEL } from '@/lib/stream/channels';
@@ -28,7 +35,6 @@ import {
 import { classifyCommunityPostTags } from '@/lib/services/communityTaggingService';
 import { hasSupabaseConfig, supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
-import TagPillSlider from '@/components/TagPillSlider';
 
 interface ArticlePostData {
   articleId: string;
@@ -513,77 +519,26 @@ export default function CommunityScreen() {
     const isOwnPost = item.user?.id === currentUserId;
     const likeCount = item.reaction_counts?.like ?? 0;
     const hasLiked = item.own_reactions?.some((reaction) => reaction.type === 'like') ?? false;
-    const articlePost = item.articlePost;
 
     return (
-      <View style={styles.postCard}>
-        <View style={styles.postHeader}>
-          <View style={styles.postHeaderText}>
-            <Text style={styles.postAuthor}>{item.user?.name ?? 'Anonymous'}</Text>
-            <Text style={styles.postTime}>{formatPostTime(item.created_at)}</Text>
-          </View>
-          <View style={styles.postTagRow}>
-            <View style={styles.postTagsWrap}>
-              {item.tags.map((tag) => (
-                <View key={`${item.id}-${tag}`} style={styles.postTag}>
-                  <Text style={styles.postTagText}>{tag}</Text>
-                </View>
-              ))}
-            </View>
-            {isOwnPost && !articlePost && (
-              <Pressable
-                onPress={() => openComposerForEdit(item)}
-                style={styles.iconAction}
-                hitSlop={8}
-              >
-                <Pencil size={14} color={Colors.textMuted} />
-              </Pressable>
-            )}
-          </View>
-        </View>
-
-        {articlePost ? (
-          <Pressable
-            onPress={() => handleOpenArticle(articlePost.articleId)}
-            style={({ pressed }) => [
-              styles.articlePreviewCard,
-              pressed && styles.articlePreviewCardPressed,
-            ]}
-          >
-            <View style={styles.articlePreviewBadge}>
-              <BookOpen size={11} color={Colors.accent} />
-              <Text style={styles.articlePreviewBadgeText}>Article</Text>
-            </View>
-            <Text style={styles.articlePreviewTitle}>{articlePost.title}</Text>
-            {articlePost.standfirst ? (
-              <Text style={styles.articlePreviewStandfirst} numberOfLines={3}>
-                {articlePost.standfirst}
-              </Text>
-            ) : null}
-          </Pressable>
-        ) : (
-          <Text style={styles.postBody}>{item.text}</Text>
-        )}
-
-        <View style={styles.postActions}>
-          <Pressable onPress={() => handleLikeToggle(item.id, hasLiked)} style={styles.actionButton} hitSlop={8}>
-            <ThumbsUp
-              size={14}
-              color={hasLiked ? Colors.accent : Colors.textMuted}
-              fill={hasLiked ? Colors.accent : 'transparent'}
-            />
-            <Text style={[styles.actionText, hasLiked && styles.actionTextActive]}>
-              {likeCount > 0 ? likeCount : 'Like'}
-            </Text>
-          </Pressable>
-          <Pressable onPress={() => handleOpenThread(item.id)} style={styles.actionButton} hitSlop={8}>
-            <MessageCircle size={14} color={Colors.textMuted} />
-            <Text style={styles.actionText}>
-              {(item.reply_count ?? 0) > 0 ? item.reply_count : 'Comment'}
-            </Text>
-          </Pressable>
-        </View>
-      </View>
+      <CommunityPostCard
+        post={{
+          id: item.id,
+          userName: item.user?.name ?? 'Anonymous',
+          timeAgo: formatPostTime(item.created_at),
+          text: item.text,
+          tags: item.tags,
+          likes: likeCount,
+          commentCount: item.reply_count ?? 0,
+          liked: hasLiked,
+          isOwnPost,
+          articlePost: item.articlePost,
+        }}
+        onLike={() => handleLikeToggle(item.id, hasLiked)}
+        onComment={() => handleOpenThread(item.id)}
+        onEdit={isOwnPost && !item.articlePost ? () => openComposerForEdit(item) : undefined}
+        onOpenArticle={handleOpenArticle}
+      />
     );
   }, [handleLikeToggle, handleOpenArticle, handleOpenThread, openComposerForEdit, session?.user?.id]);
 
@@ -643,57 +598,87 @@ export default function CommunityScreen() {
     );
   }
 
+  const listHeader = (
+    <>
+      <PhotoHero
+        source={bundledHeroImages.community}
+        height={250}
+        eyebrow="COMMUNITY"
+        title="Community"
+        subtitle="One space for support, questions, and shared wisdom"
+        rightAction={(
+          <PhotoHeroIconButton onPress={() => {}} testID="community-search">
+            <Search size={20} color={palette.textMuted} />
+          </PhotoHeroIconButton>
+        )}
+      />
+
+      <View style={styles.section}>
+        <Text style={[type.section, styles.circlesTitle]}>Circles for you</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.circlesRail}>
+          {MOCK_CIRCLES.map((circle) => (
+            <PhotoTile
+              key={circle.id}
+              source={{ uri: circle.image }}
+              title={circle.name}
+              subtitle={circle.members}
+              width={160}
+              height={110}
+            />
+          ))}
+        </ScrollView>
+
+        <TextInput
+          style={styles.filterSearchInput}
+          placeholder="Type to filter tags..."
+          placeholderTextColor={Colors.textMuted}
+          value={filterTagSearchInput}
+          onChangeText={setFilterTagSearchInput}
+        />
+        <ChipRow
+          options={visibleFilterOptions}
+          selected={selectedFilter}
+          onSelect={setSelectedFilter}
+        />
+      </View>
+    </>
+  );
+
   return (
     <LinearGradient
       colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
       style={styles.container}
     >
-      <View style={[styles.content, { paddingTop: insets.top + 20 }]}>
-        <View style={styles.header}>
-          <View style={styles.iconContainer}>
-            <Users size={24} color={Colors.accent} />
-          </View>
-          <Text style={styles.title}>Community</Text>
-          <Text style={styles.subtitle}>One space for support, questions, and shared wisdom.</Text>
-          <TextInput
-            style={styles.filterSearchInput}
-            placeholder="Type to filter tags..."
-            placeholderTextColor={Colors.textMuted}
-            value={filterTagSearchInput}
-            onChangeText={setFilterTagSearchInput}
-          />
-          <TagPillSlider
-            options={visibleFilterOptions}
-            selectedValues={[selectedFilter]}
-            onPressOption={setSelectedFilter}
-            containerStyle={styles.filterScroll}
-          />
-        </View>
-
-        {visibleMessages.length === 0 ? (
+      {visibleMessages.length === 0 ? (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
+        >
+          {listHeader}
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No posts yet</Text>
             <Text style={styles.emptySubtitle}>
               Start the conversation and share what&apos;s helping you right now.
             </Text>
           </View>
-        ) : (
-          <FlatList
-            data={visibleMessages}
-            keyExtractor={(item) => item.id}
-            renderItem={renderPostCard}
-            contentContainerStyle={[styles.feedList, { paddingBottom: insets.bottom + 120 }]}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
-      </View>
+        </ScrollView>
+      ) : (
+        <FlatList
+          data={visibleMessages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderPostCard}
+          ListHeaderComponent={listHeader}
+          contentContainerStyle={[styles.feedList, { paddingBottom: insets.bottom + 120 }]}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
 
       <Pressable
         onPress={() => setIsComposerOpen(true)}
-        style={[styles.composeFab, { bottom: insets.bottom + 24 }]}
+        style={[styles.composeFab, elevation.fab, { bottom: insets.bottom + 24 }]}
         testID="compose-post-button"
       >
-        <Plus size={24} color={Colors.background} />
+        <Plus size={24} color={palette.background} />
       </Pressable>
 
       <Modal
@@ -1202,6 +1187,18 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  section: {
+    paddingHorizontal: spacing.screenGutter,
+    marginTop: spacing['3xl'],
+    marginBottom: spacing.md,
+  },
+  circlesTitle: {
+    marginBottom: spacing.lg,
+  },
+  circlesRail: {
+    marginBottom: spacing.lg,
+    paddingRight: spacing.screenGutter,
   },
   composeFab: {
     position: 'absolute',

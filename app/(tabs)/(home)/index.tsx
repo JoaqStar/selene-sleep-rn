@@ -1,62 +1,48 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Animated, FlatList, AppState, AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, AppState, AppStateStatus } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Moon, AlertCircle, ChevronRight, Settings, CloudMoon, BookOpen, Users } from 'lucide-react-native';
+import { AlertCircle, ChevronRight, Settings } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Colors from '@/constants/colors';
+import { PhotoHero, PhotoHeroIconButton } from '@/components/PhotoHero';
+import { FeaturedArticleCard } from '@/components/FeaturedArticleCard';
+import { PhotoTile } from '@/components/PhotoTile';
 import { useOnboardingStore } from '@/stores/onboardingStore';
 import { usePlayerStore } from '@/stores/playerStore';
 import { useSessions } from '@/lib/hooks/useSessionsQuery';
-import { Session } from '@/types';
-import SessionCard from '@/components/SessionCard';
+import { useArticles } from '@/lib/hooks/useArticlesQuery';
+import { Session, Article } from '@/types';
+import { bundledHeroImages } from '@/lib/utils/imageAssets';
+import { getHomeHeroImage } from '@/lib/utils/homeHeroImage';
+import { getSessionCover } from '@/lib/utils/sessionCover';
+import { getContextualEyebrow, getTimeGreeting } from '@/lib/utils/formatGreeting';
+import { gradients, palette, spacing, type } from '@/constants/theme';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { username } = useOnboardingStore();
   const { setCurrentSession } = usePlayerStore();
-  const { data, isLoading, error, refetch, isRefetching } = useSessions();
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  const { data: sessions, error: sessionsError, refetch: refetchSessions, isRefetching } = useSessions();
+  const { data: articles } = useArticles();
   const threeAmShownRef = useRef(false);
+  const [homeHeroSource, setHomeHeroSource] = useState(getHomeHeroImage);
 
-  const tonightSessions = data ?? [];
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
-    ]).start();
-  }, []);
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  };
+  const latestArticle = (articles ?? [])[0];
+  const exploreSessions = (sessions ?? []).slice(0, 6);
 
   const handleSessionPress = useCallback((session: Session) => {
     setCurrentSession(session);
     router.push('/player');
   }, [setCurrentSession, router]);
 
+  const handleArticlePress = useCallback((article: Article) => {
+    router.push(`/(tabs)/learn/${article.id}`);
+  }, [router]);
+
   const handleThreeAmPress = useCallback(() => {
     router.push('/(tabs)/(home)/three-am');
-  }, [router]);
-
-  const handleGoToSleep = useCallback(() => {
-    router.push('/(tabs)/sleep');
-  }, [router]);
-
-  const handleGoToLearn = useCallback(() => {
-    router.push('/(tabs)/learn');
-  }, [router]);
-
-  const handleGoToCommunity = useCallback(() => {
-    router.push('/(tabs)/community');
   }, [router]);
 
   const handleOpenSettings = useCallback(() => {
@@ -69,151 +55,116 @@ export default function HomeScreen() {
     const hours = now.getHours();
     const minutes = now.getMinutes();
     const totalMinutes = hours * 60 + minutes;
-    const startMinutes = 1 * 60 + 30; // 1:30am
-    const endMinutes = 5 * 60; // 5:00am
-    return totalMinutes >= startMinutes && totalMinutes <= endMinutes;
+    return totalMinutes >= 90 && totalMinutes <= 300;
   }, []);
 
   const maybeAutoOpenThreeAm = useCallback(() => {
-    if (threeAmShownRef.current) {
-      return;
-    }
-    if (shouldShowThreeAmNow()) {
-      threeAmShownRef.current = true;
-      router.push('/(tabs)/(home)/three-am');
-    }
+    if (threeAmShownRef.current || !shouldShowThreeAmNow()) return;
+    threeAmShownRef.current = true;
+    router.push('/(tabs)/(home)/three-am');
   }, [router, shouldShowThreeAmNow]);
+
+  const refreshHomeHero = useCallback(() => {
+    setHomeHeroSource(getHomeHeroImage());
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
+      refreshHomeHero();
       maybeAutoOpenThreeAm();
-    }, [maybeAutoOpenThreeAm]),
+    }, [maybeAutoOpenThreeAm, refreshHomeHero]),
   );
 
   useEffect(() => {
-    const handleAppStateChange = (nextState: AppStateStatus) => {
-      if (nextState === 'active') {
+    const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'active') {
+        refreshHomeHero();
         maybeAutoOpenThreeAm();
       }
-    };
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => {
-      subscription.remove();
-    };
-  }, [maybeAutoOpenThreeAm]);
+    });
+    return () => sub.remove();
+  }, [maybeAutoOpenThreeAm, refreshHomeHero]);
 
-  const renderCompactSession = useCallback(({ item }: { item: Session }) => (
-    <SessionCard session={item} onPress={handleSessionPress} compact />
-  ), [handleSessionPress]);
-
-  const hasLoadError = Boolean(error);
+  const greeting = `${getTimeGreeting()},\n${username || 'Friend'}`;
+  const articleImage = latestArticle?.image_url?.trim()
+    ? { uri: latestArticle.image_url.trim() }
+    : bundledHeroImages.learn;
 
   return (
-    <LinearGradient
-      colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
-      style={styles.container}
-    >
+    <LinearGradient colors={[...gradients.appBackground.colors]} style={styles.container}>
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
       >
-        <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          <View style={styles.moonRow}>
-            <Moon size={20} color={Colors.accent} />
-            <Pressable onPress={handleOpenSettings} hitSlop={12} testID="settings-button">
-              <Settings size={18} color={Colors.textMuted} />
+        <PhotoHero
+          source={homeHeroSource}
+          height={384}
+          eyebrow={getContextualEyebrow()}
+          title={greeting}
+          rightAction={(
+            <PhotoHeroIconButton onPress={handleOpenSettings} testID="settings-button">
+              <Settings size={20} color={palette.textMuted} />
+            </PhotoHeroIconButton>
+          )}
+        />
+
+        <View style={styles.section}>
+          <View style={styles.sectionRow}>
+            <Text style={type.eyebrow}>LATEST ARTICLE</Text>
+            <Pressable onPress={() => router.push('/(tabs)/learn')} hitSlop={8}>
+              <Text style={styles.goldLink}>All articles</Text>
             </Pressable>
           </View>
-          <Text style={styles.greeting}>{getGreeting()}, {username || 'Friend'}</Text>
-          <Text style={styles.headerSubtitle}>Your space for better nights.</Text>
-        </Animated.View>
 
-        <Animated.View style={{ opacity: fadeAnim }}>
-          <Pressable onPress={handleThreeAmPress} testID="three-am-mode-button">
-            <LinearGradient
-              colors={['#1A1040', '#251845', '#1A1040']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.threeAmCard}
-            >
-              <View style={styles.threeAmIcon}>
-                <AlertCircle size={22} color={Colors.accent} />
-              </View>
-              <View style={styles.threeAmContent}>
-                <Text style={styles.threeAmTitle}>3am Mode</Text>
-                <Text style={styles.threeAmSubtitle}>Can't sleep? We've got you.</Text>
-              </View>
-              <ChevronRight size={20} color={Colors.textMuted} />
-            </LinearGradient>
-          </Pressable>
-        </Animated.View>
+          {latestArticle ? (
+            <FeaturedArticleCard
+              article={latestArticle}
+              imageSource={articleImage}
+              onPress={handleArticlePress}
+            />
+          ) : (
+            <Text style={type.meta}>No articles yet</Text>
+          )}
+        </View>
 
-        <Animated.View style={{ opacity: fadeAnim }}>
-          <Text style={styles.sectionTitle}>Explore Selene</Text>
-          <Text style={styles.sectionSubtitle}>
-            Sessions, stories, and a community that understands your nights.
-          </Text>
-          <View style={styles.quickLinksRow}>
-            <Pressable onPress={handleGoToSleep} style={styles.quickLinkCard}>
-              <View style={styles.quickLinkIcon}>
-                <CloudMoon size={18} color={Colors.accent} />
-              </View>
-              <Text style={styles.quickLinkTitle}>Sleep sessions</Text>
-              <Text style={styles.quickLinkSubtitle}>
-                Guided practices to help you drift off and stay asleep.
-              </Text>
+        <View style={styles.section}>
+          <View style={styles.sectionRow}>
+            <Text style={type.section}>More to explore</Text>
+            <Pressable onPress={() => router.push('/(tabs)/sleep')} hitSlop={8}>
+              <Text style={styles.goldLink}>See all</Text>
             </Pressable>
           </View>
-          <View style={styles.quickLinksRow}>
-            <Pressable onPress={handleGoToLearn} style={styles.quickLinkCard}>
-              <View style={styles.quickLinkIcon}>
-                <BookOpen size={18} color={Colors.accent} />
-              </View>
-              <Text style={styles.quickLinkTitle}>Articles</Text>
-              <Text style={styles.quickLinkSubtitle}>
-                Science-backed stories about hormones, sleep, and your body.
-              </Text>
-            </Pressable>
-            <Pressable onPress={handleGoToCommunity} style={styles.quickLinkCard}>
-              <View style={styles.quickLinkIcon}>
-                <Users size={18} color={Colors.accent} />
-              </View>
-              <Text style={styles.quickLinkTitle}>Community</Text>
-              <Text style={styles.quickLinkSubtitle}>
-                Share what&apos;s going on and feel a little less alone.
-              </Text>
-            </Pressable>
-          </View>
-        </Animated.View>
-
-        <Animated.View style={{ opacity: fadeAnim }}>
-          <Text style={styles.sectionTitle}>Quick Listen</Text>
-          {hasLoadError && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
+            {exploreSessions.map((session) => (
+              <PhotoTile
+                key={session.id}
+                source={getSessionCover(session)}
+                title={session.title}
+                subtitle={`${Math.round(session.duration_seconds / 60)} min`}
+                onPress={() => handleSessionPress(session)}
+                testID={`explore-session-${session.id}`}
+              />
+            ))}
+          </ScrollView>
+          {sessionsError ? (
             <View style={styles.errorBanner}>
-              <Text style={styles.errorText}>Couldn&apos;t load sessions. Check your connection.</Text>
-              <Pressable
-                onPress={() => refetch()}
-                style={({ pressed }) => [
-                  styles.errorRetryButton,
-                  (pressed || isRefetching) && styles.errorRetryButtonPressed,
-                ]}
-              >
-                <Text style={styles.errorRetryText}>
-                  {isRefetching ? 'Retrying...' : 'Retry'}
-                </Text>
+              <Text style={styles.errorText}>Couldn&apos;t load sessions.</Text>
+              <Pressable onPress={() => refetchSessions()} style={styles.retryButton}>
+                <Text style={styles.retryText}>{isRefetching ? 'Retrying...' : 'Retry'}</Text>
               </Pressable>
             </View>
-          )}
-          <FlatList
-            data={tonightSessions}
-            renderItem={renderCompactSession}
-            keyExtractor={(item) => `compact-${item.id}`}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.horizontalList}
-          />
-        </Animated.View>
+          ) : null}
+        </View>
+
+        <View style={[styles.section, { paddingHorizontal: spacing.screenGutter }]}>
+          <Pressable onPress={handleThreeAmPress} style={styles.threeAmStrip} testID="three-am-mode-button">
+            <AlertCircle size={20} color={palette.accent} />
+            <Text style={styles.threeAmText}>
+              Awake at 3am? <Text style={styles.threeAmBold}>We&apos;ve got you.</Text>
+            </Text>
+            <ChevronRight size={18} color={palette.textMuted} />
+          </Pressable>
+        </View>
       </ScrollView>
     </LinearGradient>
   );
@@ -223,139 +174,66 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollView: {
-    flex: 1,
+  section: {
+    paddingHorizontal: spacing.screenGutter,
+    marginTop: spacing['3xl'],
   },
-  content: {
-    paddingHorizontal: 20,
-  },
-  header: {
-    marginBottom: 28,
-  },
-  moonRow: {
+  sectionRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    alignItems: 'center',
+    marginBottom: spacing.lg,
   },
-  greeting: {
-    fontSize: 28,
-    fontWeight: '300' as const,
-    color: Colors.text,
-    letterSpacing: 0.5,
-    marginBottom: 4,
+  goldLink: {
+    fontSize: 13,
+    color: palette.accent,
+    fontWeight: '600',
   },
-  headerSubtitle: {
-    fontSize: 15,
-    color: Colors.textSecondary,
+  rail: {
+    paddingRight: spacing.screenGutter,
   },
-  threeAmCard: {
+  threeAmStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 28,
+    gap: spacing.md,
+    backgroundColor: palette.accentDim12,
     borderWidth: 1,
-    borderColor: 'rgba(201, 169, 110, 0.15)',
+    borderColor: palette.accentBorder,
+    borderRadius: 14,
+    padding: spacing.lg,
   },
-  threeAmIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(201, 169, 110, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  threeAmContent: {
+  threeAmText: {
     flex: 1,
-  },
-  threeAmTitle: {
-    fontSize: 17,
-    fontWeight: '600' as const,
-    color: Colors.accent,
-    marginBottom: 2,
-  },
-  threeAmSubtitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    letterSpacing: 0.3,
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginBottom: 16,
-  },
-  horizontalList: {
-    marginTop: 4,
-    marginBottom: 20,
-  },
-  quickLinksRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  quickLinkCard: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    backgroundColor: Colors.cardBackground,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  quickLinkIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(201, 169, 110, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  quickLinkTitle: {
     fontSize: 15,
-    fontWeight: '600' as const,
-    color: Colors.text,
-    marginBottom: 4,
+    color: palette.text,
   },
-  quickLinkSubtitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    lineHeight: 18,
+  threeAmBold: {
+    color: palette.accent,
+    fontWeight: '600',
   },
   errorBanner: {
+    marginTop: spacing.md,
+    padding: spacing.md,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.cardBackground,
-    padding: 12,
-    marginBottom: 12,
-    gap: 10,
+    borderColor: palette.border,
+    backgroundColor: palette.cardBackground,
+    gap: spacing.sm,
   },
   errorText: {
-    color: Colors.textSecondary,
     fontSize: 13,
+    color: palette.textSecondary,
   },
-  errorRetryButton: {
+  retryButton: {
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: Colors.accentDim,
+    backgroundColor: palette.accentDim,
   },
-  errorRetryButtonPressed: {
-    opacity: 0.85,
-  },
-  errorRetryText: {
-    color: Colors.accent,
+  retryText: {
     fontSize: 13,
-    fontWeight: '600' as const,
+    color: palette.accent,
+    fontWeight: '600',
   },
 });
