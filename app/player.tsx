@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { X, Play, Pause, RotateCcw, RotateCw, Moon } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { usePlayerStore } from '@/stores/playerStore';
@@ -17,6 +17,18 @@ function formatTime(millis: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+async function configurePlaybackAudioMode() {
+  await Audio.setAudioModeAsync({
+    allowsRecordingIOS: false,
+    playsInSilentModeIOS: true,
+    staysActiveInBackground: true,
+    interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+    interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+    shouldDuckAndroid: false,
+    playThroughEarpieceAndroid: false,
+  });
 }
 
 export default function PlayerScreen() {
@@ -120,11 +132,7 @@ export default function PlayerScreen() {
       let cachedAudioUri: string | null = null;
       try {
         console.log('[DebugPlayerAudio] Loading audio for:', currentSession.title, 'loadId =', loadId);
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: true,
-          shouldDuckAndroid: true,
-        });
+        await configurePlaybackAudioMode();
 
         await cleanupSound();
 
@@ -236,6 +244,7 @@ export default function PlayerScreen() {
       await sound.pauseAsync();
     } else {
       console.log('[DebugPlayerAudio] Resuming/starting playback');
+      await configurePlaybackAudioMode();
       await sound.playAsync();
     }
   }, [isPlaying, playButtonScale]);
