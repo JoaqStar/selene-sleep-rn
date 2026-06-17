@@ -129,12 +129,18 @@ export default function HomeScreen() {
 
         <View style={styles.section}>
           <View style={styles.sectionRow}>
-            <Text style={type.section}>More to explore</Text>
+            <Text style={type.section}>Sleep Meditations</Text>
             <Pressable onPress={() => router.push('/(tabs)/sleep')} hitSlop={8}>
               <Text style={styles.goldLink}>See all</Text>
             </Pressable>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rail}>
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            style={styles.railScroll}
+            contentContainerStyle={styles.rail}
+          >
             {exploreSessions.map((session) => (
               <PhotoTile
                 key={session.id}
@@ -189,8 +195,11 @@ const styles = StyleSheet.create({
     color: palette.accent,
     fontWeight: '600',
   },
+  railScroll: {
+    marginHorizontal: -spacing.screenGutter,
+  },
   rail: {
-    paddingRight: spacing.screenGutter,
+    paddingHorizontal: spacing.screenGutter,
   },
   threeAmStrip: {
     flexDirection: 'row',

@@ -18,15 +18,3 @@ export const sessionTileImages = [
   'https://images.unsplash.com/photo-1520206183501-b80da4e6bf4b?w=400&q=80',
   'https://images.unsplash.com/photo-1511295420927-9c27cec3598b?w=400&q=80',
 ] as const;
-
-export const circleImages = [
-  'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&q=80',
-  'https://images.unsplash.com/photo-1581579438747-1dc8d17bbce4?w=400&q=80',
-  'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=400&q=80',
-] as const;
-
-export const MOCK_CIRCLES = [
-  { id: 'night-owls', name: 'Night Owls', members: '1.2k members', image: circleImages[0] },
-  { id: 'new-to-peri', name: 'New to Peri', members: '860 members', image: circleImages[1] },
-  { id: 'hrt-me', name: 'HRT & Me', members: '2.0k members', image: circleImages[2] },
-] as const;

@@ -75,7 +75,13 @@ export default function ThreeAmScreen() {
           <Text style={styles.heroText}>It's okay to be awake.</Text>
           <Text style={styles.heroSubtext}>What's happening right now?</Text>
 
-          <View style={styles.categories}>
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            style={styles.categoriesScroll}
+            contentContainerStyle={styles.categories}
+          >
             {THREE_AM_CATEGORIES.map((cat) => {
               const isSelected = cat === selectedCategory;
               return (
@@ -104,7 +110,7 @@ export default function ThreeAmScreen() {
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
 
           <Text style={styles.descriptionText}>
             {CATEGORY_DESCRIPTIONS[selectedCategory]}
@@ -146,21 +152,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 28,
   },
+  categoriesScroll: {
+    marginHorizontal: -20,
+    marginBottom: 20,
+  },
   categories: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
     gap: 10,
+    paddingHorizontal: 20,
   },
   categoryCard: {
-    flex: 1,
+    width: 118,
     alignItems: 'center',
     paddingVertical: 16,
     paddingHorizontal: 8,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
-    minWidth: 100,
   },
   categoryCardSelected: {
     borderColor: 'rgba(201, 169, 110, 0.3)',

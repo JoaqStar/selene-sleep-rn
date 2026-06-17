@@ -18,11 +18,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { PhotoHero, PhotoHeroIconButton } from '@/components/PhotoHero';
-import { PhotoTile } from '@/components/PhotoTile';
 import { ChipRow } from '@/components/Chip';
 import { CommunityPostCard } from '@/components/CommunityPostCard';
-import { bundledHeroImages, MOCK_CIRCLES } from '@/lib/utils/imageAssets';
-import { elevation, palette, spacing, type } from '@/constants/theme';
+import { bundledHeroImages } from '@/lib/utils/imageAssets';
+import { elevation, palette, spacing } from '@/constants/theme';
 import TagPillSlider from '@/components/TagPillSlider';
 import { useStreamChat } from '@/lib/hooks/useStreamChat';
 import { useCommunityStore } from '@/stores/communityStore';
@@ -614,20 +613,6 @@ export default function CommunityScreen() {
       />
 
       <View style={styles.section}>
-        <Text style={[type.section, styles.circlesTitle]}>Circles for you</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.circlesRail}>
-          {MOCK_CIRCLES.map((circle) => (
-            <PhotoTile
-              key={circle.id}
-              source={{ uri: circle.image }}
-              title={circle.name}
-              subtitle={circle.members}
-              width={160}
-              height={110}
-            />
-          ))}
-        </ScrollView>
-
         <TextInput
           style={styles.filterSearchInput}
           placeholder="Type to filter tags..."
@@ -1192,13 +1177,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screenGutter,
     marginTop: spacing['3xl'],
     marginBottom: spacing.md,
-  },
-  circlesTitle: {
-    marginBottom: spacing.lg,
-  },
-  circlesRail: {
-    marginBottom: spacing.lg,
-    paddingRight: spacing.screenGutter,
   },
   composeFab: {
     position: 'absolute',

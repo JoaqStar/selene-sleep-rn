@@ -33,7 +33,9 @@ export function ChipRow({ options, selected, onSelect, containerStyle, testIDPre
   return (
     <ScrollView
       horizontal
+      nestedScrollEnabled
       showsHorizontalScrollIndicator={false}
+      style={styles.scroll}
       contentContainerStyle={[styles.row, containerStyle]}
     >
       {options.map((option) => (
@@ -50,9 +52,13 @@ export function ChipRow({ options, selected, onSelect, containerStyle, testIDPre
 }
 
 const styles = StyleSheet.create({
+  scroll: {
+    marginHorizontal: -spacing.screenGutter,
+  },
   row: {
     gap: spacing.sm,
     paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.screenGutter,
   },
   chip: {
     paddingHorizontal: spacing.lg,
