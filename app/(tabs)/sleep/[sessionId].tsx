@@ -46,6 +46,7 @@ export default function SessionDetailScreen() {
   const minutes = Math.round(session.duration_seconds / 60);
   const tags = getSessionTags(session);
   const paragraphs = session.description?.split('\n\n').filter(Boolean) ?? [];
+  const cover = getSessionCover(session);
 
   return (
     <View style={styles.container}>
@@ -53,20 +54,31 @@ export default function SessionDetailScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.hero}>
-          <Photo source={getSessionCover(session)} variant="hero" />
-          <Pressable
-            onPress={() => router.back()}
-            style={[styles.backButton, { top: insets.top + spacing.md }]}
-            hitSlop={12}
-          >
-            <ArrowLeft size={20} color={palette.text} />
-          </Pressable>
-          <View style={styles.heroOverlay}>
+        {cover ? (
+          <View style={styles.hero}>
+            <Photo source={cover} variant="hero" />
+            <Pressable
+              onPress={() => router.back()}
+              style={[styles.backButton, { top: insets.top + spacing.md }]}
+              hitSlop={12}
+            >
+              <ArrowLeft size={20} color={palette.text} />
+            </Pressable>
+            <View style={styles.heroOverlay}>
+              <Text style={type.eyebrow}>SLEEP MEDITATION</Text>
+              <Text style={type.titleSerif}>{session.title}</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={[styles.textHeader, { paddingTop: insets.top + spacing.md }]}>
+            <Pressable onPress={() => router.back()} style={styles.backButtonInline} hitSlop={12}>
+              <ArrowLeft size={20} color={palette.text} />
+              <Text style={styles.backLabel}>Sleep</Text>
+            </Pressable>
             <Text style={type.eyebrow}>SLEEP MEDITATION</Text>
             <Text style={type.titleSerif}>{session.title}</Text>
           </View>
-        </View>
+        )}
 
         <View style={styles.body}>
           <View style={styles.metaRow}>
@@ -115,6 +127,11 @@ const styles = StyleSheet.create({
     height: 300,
     position: 'relative',
   },
+  textHeader: {
+    paddingHorizontal: spacing.screenGutter,
+    gap: spacing.md,
+    paddingBottom: spacing.lg,
+  },
   backButton: {
     position: 'absolute',
     left: spacing.screenGutter,
@@ -125,6 +142,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
+  },
+  backButtonInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  backLabel: {
+    fontSize: 15,
+    color: palette.textSecondary,
   },
   heroOverlay: {
     position: 'absolute',

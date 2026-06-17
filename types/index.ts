@@ -10,6 +10,7 @@ export interface Session {
   sort_order: number;
   instructor?: string;
   teacher_name?: string;
+  image_url?: string | null;
 }
 
 export type ArticleStatus = 'draft' | 'published' | 'archived' | string;

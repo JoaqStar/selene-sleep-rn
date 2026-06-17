@@ -1,11 +1,12 @@
 import React, { useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import { ImageSource } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Photo } from '@/components/Photo';
 import { motion, palette, radius, spacing } from '@/constants/theme';
 
 type PhotoTileProps = {
-  source: ImageSource;
+  source?: ImageSource | null;
   title: string;
   subtitle?: string;
   width?: number;
@@ -43,7 +44,14 @@ export function PhotoTile({
         disabled={!onPress}
       >
         <View style={[styles.tile, { width, height }]}>
-          <Photo source={source} variant="card" />
+          {source ? (
+            <Photo source={source} variant="card" />
+          ) : (
+            <LinearGradient
+              colors={[palette.cardBackground, palette.cardBackgroundLight]}
+              style={StyleSheet.absoluteFill}
+            />
+          )}
           <View style={styles.labelBlock}>
             <Text style={styles.title} numberOfLines={2}>{title}</Text>
             {subtitle ? <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text> : null}

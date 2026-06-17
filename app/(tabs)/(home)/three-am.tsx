@@ -10,7 +10,6 @@ import { useSessionsByMoodTag } from '@/lib/hooks/useSessionsQuery';
 import { Session } from '@/types';
 import SessionCard from '@/components/SessionCard';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { getSessionCover } from '@/lib/utils/sessionCover';
 
 const THREE_AM_CATEGORIES = ["can't sleep", 'hot & restless', 'racing mind', 'lean into this hour'] as const;
 
@@ -117,7 +116,6 @@ export default function ThreeAmScreen() {
                 key={session.id}
                 session={session}
                 onPress={handleSessionPress}
-                imageSource={getSessionCover(session)}
               />
             ))}
           </View>

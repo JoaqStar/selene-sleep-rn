@@ -1,17 +1,9 @@
 import { ImageSource } from 'expo-image';
 import { Session } from '@/types';
-import { sessionTileImages } from './imageAssets';
 
-const categoryImages: Record<string, string> = {
-  meditation: sessionTileImages[0],
-  'body scan': sessionTileImages[1],
-  yoga: sessionTileImages[2],
-  breathwork: sessionTileImages[0],
-};
-
-export function getSessionCover(session: Session): ImageSource {
-  const key = session.category?.toLowerCase() ?? '';
-  const uri = categoryImages[key] ?? sessionTileImages[session.id % sessionTileImages.length];
+export function getSessionCover(session: Session): ImageSource | null {
+  const uri = session.image_url?.trim();
+  if (!uri) return null;
   return { uri };
 }
 

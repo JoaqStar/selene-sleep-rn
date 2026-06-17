@@ -1,23 +1,23 @@
 import React, { useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
-import { ImageSource } from 'expo-image';
 import { Play } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Photo } from '@/components/Photo';
 import { Session } from '@/types';
-import { getSessionInstructor } from '@/lib/utils/sessionCover';
+import { getSessionInstructor, getSessionCover } from '@/lib/utils/sessionCover';
 import { motion, palette, radius, spacing, type } from '@/constants/theme';
 
 type FeatureCardProps = {
   session: Session;
-  imageSource: ImageSource;
   onPlay: (session: Session) => void;
 };
 
-export function FeatureCard({ session, imageSource, onPlay }: FeatureCardProps) {
+export function FeatureCard({ session, onPlay }: FeatureCardProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const instructor = getSessionInstructor(session);
   const minutes = Math.round(session.duration_seconds / 60);
   const meta = [instructor, `${minutes} min`].filter(Boolean).join(' · ');
+  const cover = getSessionCover(session);
 
   const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, { toValue: motion.pressScale, useNativeDriver: true }).start();
@@ -36,7 +36,14 @@ export function FeatureCard({ session, imageSource, onPlay }: FeatureCardProps) 
         testID={`feature-session-${session.id}`}
       >
         <View style={styles.card}>
-          <Photo source={imageSource} variant="card" />
+          {cover ? (
+            <Photo source={cover} variant="card" />
+          ) : (
+            <LinearGradient
+              colors={[palette.cardBackground, palette.cardBackgroundLight]}
+              style={StyleSheet.absoluteFill}
+            />
+          )}
           <View style={styles.overlay}>
             <Text style={type.titleSerif} numberOfLines={2}>{session.title}</Text>
             <View style={styles.footer}>

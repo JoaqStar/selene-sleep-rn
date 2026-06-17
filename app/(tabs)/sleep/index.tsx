@@ -11,7 +11,6 @@ import { usePlayerStore } from '@/stores/playerStore';
 import { useSessions } from '@/lib/hooks/useSessionsQuery';
 import { Session } from '@/types';
 import { bundledHeroImages } from '@/lib/utils/imageAssets';
-import { getSessionCover } from '@/lib/utils/sessionCover';
 import { gradients, palette, spacing, type } from '@/constants/theme';
 
 export default function SleepScreen() {
@@ -62,7 +61,6 @@ export default function SleepScreen() {
           {featuredSession ? (
             <FeatureCard
               session={featuredSession}
-              imageSource={getSessionCover(featuredSession)}
               onPlay={handleSessionPress}
             />
           ) : null}
@@ -83,7 +81,6 @@ export default function SleepScreen() {
               key={session.id}
               session={session}
               onPress={handleSessionPress}
-              imageSource={getSessionCover(session)}
             />
           ))}
         </View>

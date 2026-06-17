@@ -3,30 +3,28 @@ import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import { Play, ChevronRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ImageSource } from 'expo-image';
 import Colors from '@/constants/colors';
 import { motion, palette, radius, spacing, type } from '@/constants/theme';
 import { Session } from '@/types';
-import { getSessionInstructor } from '@/lib/utils/sessionCover';
+import { getSessionInstructor, getSessionCover } from '@/lib/utils/sessionCover';
 import { Photo } from '@/components/Photo';
 
 interface SessionCardProps {
   session: Session;
   onPress: (session: Session) => void;
-  imageSource?: ImageSource;
   variant?: 'row' | 'compact';
 }
 
 export default React.memo(function SessionCard({
   session,
   onPress,
-  imageSource,
   variant = 'row',
 }: SessionCardProps) {
   const router = useRouter();
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const instructor = getSessionInstructor(session);
   const minutes = Math.round(session.duration_seconds / 60);
+  const cover = getSessionCover(session);
 
   const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, { toValue: motion.pressScale, useNativeDriver: true }).start();
@@ -72,7 +70,7 @@ export default React.memo(function SessionCard({
     <Animated.View style={[{ transform: [{ scale: scaleAnim }] }]}>
       <View style={styles.rowCard}>
         <View style={styles.thumb}>
-          {imageSource ? <Photo source={imageSource} variant="card" /> : null}
+          {cover ? <Photo source={cover} variant="card" /> : null}
         </View>
         <View style={styles.middle}>
           <Text style={type.cardTitle} numberOfLines={2}>{session.title}</Text>
