@@ -38,7 +38,7 @@ export default function HomeScreen() {
   }, [setCurrentSession, router]);
 
   const handleArticlePress = useCallback((article: Article) => {
-    router.push(`/(tabs)/learn/${article.id}`);
+    router.push(`/(tabs)/(home)/${article.id}`);
   }, [router]);
 
   const handleThreeAmPress = useCallback(() => {

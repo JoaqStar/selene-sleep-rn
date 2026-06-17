@@ -19,6 +19,8 @@ export default function HomeLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen name="[articleId]" options={{ headerShown: false }} />
+      <Stack.Screen name="thread" options={{ headerShown: false }} />
     </Stack>
   );
 }

@@ -1,11 +1,11 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import Colors from '@/constants/colors';
 import { useStreamMessage } from '@/lib/hooks/useStreamMessage';
 import { COMMUNITY_CHANNEL } from '@/lib/stream/channels';
 
-export type ArticleDiscussionStack = 'learn' | 'community';
+export type ArticleDiscussionStack = 'learn' | 'community' | 'home';
 
 type ArticleCommunityEngagementProps = {
   streamMessageId: string;
@@ -22,10 +22,26 @@ export function ArticleCommunityEngagement({
   discussionStack,
 }: ArticleCommunityEngagementProps) {
   const router = useRouter();
-  const { stats, isLoading } = useStreamMessage(streamMessageId);
+  const { stats, isLoading, refetch } = useStreamMessage(streamMessageId);
+  const isFirstFocus = useRef(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocus.current) {
+        isFirstFocus.current = false;
+        return;
+      }
+      void refetch();
+    }, [refetch]),
+  );
 
   const handlePress = useCallback(() => {
-    const threadPath = discussionStack === 'learn' ? '/learn/thread' : '/community/thread';
+    const threadPath =
+      discussionStack === 'learn'
+        ? '/(tabs)/learn/thread'
+        : discussionStack === 'home'
+          ? '/(tabs)/(home)/thread'
+          : '/(tabs)/community/thread';
     router.push({
       pathname: threadPath,
       params: {

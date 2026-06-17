@@ -126,7 +126,7 @@ export function ArticleDetailView({ articleId, backLabel, discussionStack }: Art
             </Pressable>
             <View style={styles.heroOverlay}>
               <Badge label={categoryLabel} />
-              <Text style={type.titleSerif}>{article.title}</Text>
+              <Text selectable style={type.titleSerif}>{article.title}</Text>
             </View>
           </View>
         ) : (
@@ -136,8 +136,8 @@ export function ArticleDetailView({ articleId, backLabel, discussionStack }: Art
               <Text style={styles.backLabel}>{backLabel}</Text>
             </Pressable>
             <Badge label={categoryLabel} />
-            <Text style={type.titleSerif}>{article.title}</Text>
-            <Text style={styles.standfirst}>{article.standfirst}</Text>
+            <Text selectable style={type.titleSerif}>{article.title}</Text>
+            <Text selectable style={styles.standfirst}>{article.standfirst}</Text>
           </View>
         )}
 
@@ -145,18 +145,18 @@ export function ArticleDetailView({ articleId, backLabel, discussionStack }: Art
           <View style={styles.bylineRow}>
             <Avatar name={article.author} size={36} />
             <View style={styles.bylineText}>
-              <Text style={styles.authorName}>{article.author}</Text>
-              {bylineMeta ? <Text style={styles.bylineMeta}>{bylineMeta}</Text> : null}
+              <Text selectable style={styles.authorName}>{article.author}</Text>
+              {bylineMeta ? <Text selectable style={styles.bylineMeta}>{bylineMeta}</Text> : null}
             </View>
             <Bookmark size={20} color={palette.textMuted} />
           </View>
 
-          {imageUrl ? <Text style={styles.standfirst}>{article.standfirst}</Text> : null}
+          {imageUrl ? <Text selectable style={styles.standfirst}>{article.standfirst}</Text> : null}
 
           <View style={styles.divider} />
 
           {paragraphs.map((para, idx) => (
-            <Text key={idx} style={type.body}>{para}</Text>
+            <Text key={idx} selectable style={type.body}>{para}</Text>
           ))}
 
         {articleSources.length > 0 ? (
