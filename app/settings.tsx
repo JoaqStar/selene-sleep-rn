@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Switch, ScrollView, Pressable, Linking, Platform, AppState, AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, Switch, ScrollView, Pressable, Linking, Platform, AppState, AppStateStatus, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UsernameField } from '@/components/UsernameField';
 import { useUsernameAvailability } from '@/lib/hooks/useUsernameAvailability';
 import { claimUsername } from '@/lib/services/usernameService';
+import { requestAccountDeletion } from '@/lib/services/accountService';
 
 type NotificationPreferences = {
   likes_enabled: boolean;
@@ -78,6 +79,31 @@ export default function SettingsScreen() {
     await signOut();
     router.replace('/sign-in');
   }, [signOut, router]);
+
+  const handleDeleteAccount = useCallback(() => {
+    Alert.alert(
+      'Delete account',
+      'This action is permanent. We\'ll delete your account and data, and send you an email once it\'s done. You can keep using Selene until then.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await requestAccountDeletion();
+              Alert.alert(
+                'Deletion requested',
+                'We received your request. We\'ll send you an email once your account has been deleted.',
+              );
+            } catch {
+              Alert.alert('Could not submit request', 'Please try again later.');
+            }
+          },
+        },
+      ],
+    );
+  }, []);
 
   const handleOpenSystemSettings = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -368,6 +394,17 @@ export default function SettingsScreen() {
               />
             </View>
           </View>
+
+          <Pressable
+            onPress={handleDeleteAccount}
+            style={({ pressed }) => [
+              styles.deleteAccountButton,
+              pressed && styles.deleteAccountButtonPressed,
+            ]}
+            testID="settings-delete-account-button"
+          >
+            <Text style={styles.deleteAccountText}>Delete account</Text>
+          </Pressable>
         </ScrollView>
 
         <View
@@ -551,6 +588,24 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.border,
     paddingHorizontal: 24,
     paddingTop: 12,
+    gap: 10,
+  },
+  deleteAccountButton: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#E57373',
+  },
+  deleteAccountButtonPressed: {
+    opacity: 0.8,
+  },
+  deleteAccountText: {
+    fontSize: 14,
+    color: '#E57373',
+    fontWeight: '500',
   },
   logoutButton: {
     alignSelf: 'stretch',

@@ -19,6 +19,10 @@ function formatTime(millis: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+const PULSE_BREATH_DURATION_MS = 2000;
+const PULSE_SCALE_MIN = 1;
+const PULSE_SCALE_MAX = 1.16;
+
 async function configurePlaybackAudioMode() {
   await Audio.setAudioModeAsync({
     allowsRecordingIOS: false,
@@ -53,8 +57,8 @@ export default function PlayerScreen() {
       pulseLoopRef.current?.stop();
       const loop = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.05, duration: 2000, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: PULSE_SCALE_MAX, duration: PULSE_BREATH_DURATION_MS, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: PULSE_SCALE_MIN, duration: PULSE_BREATH_DURATION_MS, useNativeDriver: true }),
         ]),
       );
       pulseLoopRef.current = loop;
@@ -64,7 +68,7 @@ export default function PlayerScreen() {
 
     pulseLoopRef.current?.stop();
     pulseLoopRef.current = null;
-    pulseAnim.setValue(1);
+    pulseAnim.setValue(PULSE_SCALE_MIN);
   }, [isPlaying, pulseAnim]);
 
   useEffect(() => {
@@ -79,12 +83,12 @@ export default function PlayerScreen() {
       if (!isActive) {
         pulseLoopRef.current?.stop();
         pulseLoopRef.current = null;
-        pulseAnim.setValue(1);
+        pulseAnim.setValue(PULSE_SCALE_MIN);
       } else if (!wasActive && isPlaying) {
         const loop = Animated.loop(
           Animated.sequence([
-            Animated.timing(pulseAnim, { toValue: 1.05, duration: 2000, useNativeDriver: true }),
-            Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
+            Animated.timing(pulseAnim, { toValue: PULSE_SCALE_MAX, duration: PULSE_BREATH_DURATION_MS, useNativeDriver: true }),
+            Animated.timing(pulseAnim, { toValue: PULSE_SCALE_MIN, duration: PULSE_BREATH_DURATION_MS, useNativeDriver: true }),
           ]),
         );
         pulseLoopRef.current = loop;

@@ -34,6 +34,10 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Google services credentials (contains secrets — keep out of VCS)
+google-services.json
+GoogleService-Info.plist
+
 # typescript
 *.tsbuildinfo
 .vercel

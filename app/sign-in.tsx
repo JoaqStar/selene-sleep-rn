@@ -7,6 +7,7 @@ import { Moon, Mail, ArrowRight, CheckCircle } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { AppleLogo, GoogleLogo } from '@/components/OAuthProviderIcons';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -300,7 +301,10 @@ export default function SignInScreen() {
                     ]}
                     testID="sign-in-google-button"
                   >
-                    <Text style={styles.oauthButtonText}>Continue with Google</Text>
+                    <View style={styles.oauthButtonContent}>
+                      <GoogleLogo size={18} />
+                      <Text style={styles.oauthButtonText}>Continue with Google</Text>
+                    </View>
                   </Pressable>
                   <Pressable
                     onPress={() => handleOAuthSignIn('apple')}
@@ -311,7 +315,10 @@ export default function SignInScreen() {
                     ]}
                     testID="sign-in-apple-button"
                   >
-                    <Text style={styles.oauthButtonText}>Continue with Apple</Text>
+                    <View style={styles.oauthButtonContent}>
+                      <AppleLogo size={18} color={Colors.text} />
+                      <Text style={styles.oauthButtonText}>Continue with Apple</Text>
+                    </View>
                   </Pressable>
                 </View>
               </View>
@@ -506,6 +513,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.borderLight,
+  },
+  oauthButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   oauthGoogleButton: {
     backgroundColor: Colors.surface,
