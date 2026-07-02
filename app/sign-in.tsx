@@ -1,15 +1,44 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView } from 'react-native';
-import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Moon, Mail, ArrowRight, CheckCircle } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import { AppleLogo, GoogleLogo } from '@/components/OAuthProviderIcons';
+import { GoogleLogo } from '@/components/OAuthProviderIcons';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+
+WebBrowser.maybeCompleteAuthSession();
+
+// Turn a Supabase OAuth redirect (implicit tokens or PKCE code) into a session.
+async function completeSessionFromRedirectUrl(url: string): Promise<boolean> {
+  if (!supabase) return false;
+  const parsed = new URL(url);
+  const hashParams = new URLSearchParams(
+    parsed.hash?.startsWith('#') ? parsed.hash.slice(1) : parsed.hash ?? '',
+  );
+  const accessToken = hashParams.get('access_token') ?? parsed.searchParams.get('access_token');
+  const refreshToken = hashParams.get('refresh_token') ?? parsed.searchParams.get('refresh_token');
+  const code = parsed.searchParams.get('code') ?? hashParams.get('code');
+
+  if (accessToken && refreshToken) {
+    const { error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+    return !error;
+  }
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    return !error;
+  }
+  return false;
+}
 
 export default function SignInScreen() {
   const [email, setEmail] = useState('');
@@ -51,7 +80,64 @@ export default function SignInScreen() {
     }
   }, [session, router]);
 
-  const handleOAuthSignIn = useCallback(
+  // iOS: fully native Sign in with Apple — no webview. Apple returns an identity
+  // token that we exchange for a Supabase session via signInWithIdToken.
+  const handleNativeAppleSignIn = useCallback(async () => {
+    if (!supabase) {
+      setError('Sign-in is not configured. Missing Supabase credentials.');
+      return;
+    }
+
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+      const rawNonce = [...Crypto.getRandomBytes(16)]
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      // Hex-encoded SHA-256 matches Supabase GoTrue's nonce comparison.
+      const hashedNonce = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        rawNonce,
+      );
+
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+        nonce: hashedNonce,
+      });
+
+      if (!credential.identityToken) {
+        setError('Apple did not return an identity token. Please try again.');
+        return;
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+        nonce: rawNonce,
+      });
+
+      if (signInError) {
+        console.error('[Apple] signInWithIdToken error:', signInError);
+        setError(signInError.message);
+        return;
+      }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e: any) {
+      if (e?.code === 'ERR_REQUEST_CANCELED') {
+        return;
+      }
+      console.error('[Apple] Native sign-in error:', e);
+      setError(e?.message ?? 'Something went wrong. Please try again.');
+    }
+  }, []);
+
+  // Google (all platforms) and Apple-on-Android: open the provider in an in-app
+  // Safari View Controller / Custom Tab rather than kicking out to the browser.
+  const handleWebOAuthSignIn = useCallback(
     async (provider: 'google' | 'apple') => {
       if (!supabase) {
         setError('Sign-in is not configured. Missing Supabase credentials.');
@@ -69,6 +155,7 @@ export default function SignInScreen() {
           provider,
           options: {
             redirectTo,
+            skipBrowserRedirect: true,
           },
         });
 
@@ -78,11 +165,19 @@ export default function SignInScreen() {
           return;
         }
 
-        if (data?.url) {
-          console.log('[OAuth] Opening browser URL for provider:', provider);
-          await Linking.openURL(data.url);
-        } else {
+        if (!data?.url) {
           console.warn('[OAuth] No URL returned from signInWithOAuth');
+          return;
+        }
+
+        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+        if (result.type === 'success' && result.url) {
+          const ok = await completeSessionFromRedirectUrl(result.url);
+          if (!ok) {
+            setError('Could not complete sign-in. Please try again.');
+          } else {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
         }
       } catch (e: any) {
         console.error('[OAuth] Unexpected error:', e);
@@ -293,7 +388,7 @@ export default function SignInScreen() {
                 <Text style={styles.oauthLabel}>Or continue with</Text>
                 <View style={styles.oauthButtonsRow}>
                   <Pressable
-                    onPress={() => handleOAuthSignIn('google')}
+                    onPress={() => handleWebOAuthSignIn('google')}
                     style={({ pressed }) => [
                       styles.oauthButton,
                       styles.oauthGoogleButton,
@@ -306,20 +401,30 @@ export default function SignInScreen() {
                       <Text style={styles.oauthButtonText}>Continue with Google</Text>
                     </View>
                   </Pressable>
-                  <Pressable
-                    onPress={() => handleOAuthSignIn('apple')}
-                    style={({ pressed }) => [
-                      styles.oauthButton,
-                      styles.oauthAppleButton,
-                      pressed && styles.oauthButtonPressed,
-                    ]}
-                    testID="sign-in-apple-button"
-                  >
-                    <View style={styles.oauthButtonContent}>
-                      <AppleLogo size={18} color={Colors.text} />
-                      <Text style={styles.oauthButtonText}>Continue with Apple</Text>
-                    </View>
-                  </Pressable>
+                  {Platform.OS === 'ios' ? (
+                    <AppleAuthentication.AppleAuthenticationButton
+                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                      cornerRadius={14}
+                      style={styles.appleNativeButton}
+                      onPress={handleNativeAppleSignIn}
+                      testID="sign-in-apple-button"
+                    />
+                  ) : (
+                    <Pressable
+                      onPress={() => handleWebOAuthSignIn('apple')}
+                      style={({ pressed }) => [
+                        styles.oauthButton,
+                        styles.oauthAppleButton,
+                        pressed && styles.oauthButtonPressed,
+                      ]}
+                      testID="sign-in-apple-button"
+                    >
+                      <View style={styles.oauthButtonContent}>
+                        <Text style={styles.oauthButtonText}>Continue with Apple</Text>
+                      </View>
+                    </Pressable>
+                  )}
                 </View>
               </View>
             </>
@@ -518,6 +623,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  appleNativeButton: {
+    height: 50,
+    width: '100%',
   },
   oauthGoogleButton: {
     backgroundColor: Colors.surface,
