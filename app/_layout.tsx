@@ -22,7 +22,7 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
-  const { hasUsername, usernameDbReady, profileChecked, loadUserProfile } = useOnboardingStore();
+  const { hasUsername, profileChecked, loadUserProfile } = useOnboardingStore();
   const { session } = useAuthStore();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
@@ -38,23 +38,43 @@ function RootLayoutNav() {
   }, [session?.user?.id, loadUserProfile]);
 
   const isNavigationReady = Boolean(navigationState?.key);
-  const needsUsername = Boolean(
-    session && profileChecked && usernameDbReady && !hasUsername,
-  );
+  const mustSetUsername = Boolean(session && !hasUsername);
+  const pendingProfileCheck = Boolean(session && hasUsername && !profileChecked);
   const onSignIn = activeRoute === 'sign-in';
   const onCompleteProfile = activeRoute === 'complete-profile';
   const onOnboarding = activeRoute === 'onboarding';
+
+  const redirectHref = (() => {
+    if (!session) {
+      return onSignIn ? null : '/sign-in';
+    }
+    if (mustSetUsername) {
+      return onCompleteProfile || onOnboarding ? null : '/complete-profile';
+    }
+    if (pendingProfileCheck) {
+      return null;
+    }
+    if (onSignIn || onCompleteProfile || onOnboarding) {
+      return '/(tabs)/(home)';
+    }
+    return null;
+  })();
 
   if (!isNavigationReady) {
     return <View style={{ flex: 1, backgroundColor: Colors.background }} />;
   }
 
+  if (mustSetUsername && !onCompleteProfile && !onOnboarding) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.background }}>
+        <Redirect href="/complete-profile" />
+      </View>
+    );
+  }
+
   return (
     <>
-      {!session && !onSignIn && <Redirect href="/sign-in" />}
-      {needsUsername && !onCompleteProfile && !onOnboarding && (
-        <Redirect href="/complete-profile" />
-      )}
+      {redirectHref ? <Redirect href={redirectHref} /> : null}
       <Stack
         screenOptions={{
           headerBackTitle: "Back",

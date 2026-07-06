@@ -136,9 +136,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
 
     const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(
-      (_event, session) => {
+      async (_event, session) => {
         console.log('[Auth] State changed:', _event, session ? 'active' : 'none');
         console.log('[DebugAppLoadingIssue] onAuthStateChange received event:', _event);
+
+        if (_event === 'SIGNED_IN' || _event === 'INITIAL_SESSION' || _event === 'SIGNED_OUT') {
+          await useOnboardingStore
+            .getState()
+            .syncOnboardingForAuthUser(session?.user?.id ?? null, _event);
+        }
+
         set({ session });
 
         // Only register on sign-in / initial session — not USER_UPDATED (e.g. username

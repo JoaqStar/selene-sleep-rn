@@ -244,18 +244,31 @@ export async function claimUsername(
     return { ok: true, username: storedUsername };
   }
 
-  // Do not await: updateUser emits USER_UPDATED and can deadlock if auth listeners
-  // perform awaited work before this call returns.
-  void supabase.auth
-    .updateUser({ data: { full_name: storedUsername } })
-    .then(({ error: metaError }) => {
-      if (metaError) {
-        console.error('[UsernameService] updateUser metadata failed:', metaError);
-      }
-    })
-    .catch((err) => {
-      console.error('[UsernameService] updateUser metadata unexpected error:', err);
-    });
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user) {
+    return { ok: true, username: storedUsername };
+  }
+
+  // Keep Apple-provided names in auth metadata; only fall back to username when empty.
+  const existingName =
+    typeof authData.user.user_metadata?.full_name === 'string'
+      ? authData.user.user_metadata.full_name.trim()
+      : '';
+  const shouldMirrorUsernameToMetadata =
+    !existingName || existingName === storedUsername;
+
+  if (shouldMirrorUsernameToMetadata) {
+    void supabase.auth
+      .updateUser({ data: { full_name: storedUsername } })
+      .then(({ error: metaError }) => {
+        if (metaError) {
+          console.error('[UsernameService] updateUser metadata failed:', metaError);
+        }
+      })
+      .catch((err) => {
+        console.error('[UsernameService] updateUser metadata unexpected error:', err);
+      });
+  }
 
   return { ok: true, username: storedUsername };
 }

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, Redirect } from 'expo-router';
 import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -10,8 +10,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { GoogleLogo } from '@/components/OAuthProviderIcons';
+import {
+  syncAppleProfileFromCredential,
+  syncOAuthProfileFromUser,
+} from '@/lib/services/appleProfileService';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+import { useOnboardingStore } from '@/stores/onboardingStore';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -53,6 +58,7 @@ export default function SignInScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuthStore();
+  const hasUsername = useOnboardingStore((state) => state.hasUsername);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -72,13 +78,6 @@ export default function SignInScreen() {
       ),
     ]).start();
   }, []);
-
-  useEffect(() => {
-    if (session) {
-      console.log('[SignIn] Session detected, navigating to root');
-      router.replace('/');
-    }
-  }, [session, router]);
 
   // iOS: fully native Sign in with Apple — no webview. Apple returns an identity
   // token that we exchange for a Supabase session via signInWithIdToken.
@@ -125,6 +124,7 @@ export default function SignInScreen() {
         return;
       }
 
+      await syncAppleProfileFromCredential(credential);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e: any) {
       if (e?.code === 'ERR_REQUEST_CANCELED') {
@@ -176,6 +176,10 @@ export default function SignInScreen() {
           if (!ok) {
             setError('Could not complete sign-in. Please try again.');
           } else {
+            const { data: authData, error: authError } = await supabase.auth.getUser();
+            if (!authError && authData.user) {
+              await syncOAuthProfileFromUser(authData.user);
+            }
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           }
         }
@@ -314,6 +318,10 @@ export default function SignInScreen() {
     isSent,
     hasFocusedEmail,
   });
+
+  if (session && !hasUsername) {
+    return <Redirect href="/complete-profile" />;
+  }
 
   return (
     <LinearGradient

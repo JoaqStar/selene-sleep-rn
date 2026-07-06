@@ -19,7 +19,11 @@ import { useOnboardingStore } from '@/stores/onboardingStore';
 import { useAuthStore } from '@/stores/authStore';
 import { UsernameField } from '@/components/UsernameField';
 import { useUsernameAvailability } from '@/lib/hooks/useUsernameAvailability';
-import { deriveUsernameFromLabel } from '@/lib/user/username';
+import {
+  getDefaultUsernameSuggestion,
+  getNameFromUserMetadata,
+  isOAuthSocialUser,
+} from '@/lib/services/appleProfileService';
 
 export default function CompleteProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -27,11 +31,9 @@ export default function CompleteProfileScreen() {
   const { session } = useAuthStore();
   const { completeOnboarding, usernameDbReady } = useOnboardingStore();
 
-  const rawMetadata = (session?.user?.user_metadata ?? {}) as Record<string, unknown>;
-  const remoteName =
-    (typeof rawMetadata.full_name === 'string' && rawMetadata.full_name) ||
-    (typeof rawMetadata.name === 'string' && rawMetadata.name) ||
-    '';
+  const isSocialUser = session?.user ? isOAuthSocialUser(session.user) : false;
+  const displayName = session?.user ? getNameFromUserMetadata(session.user) : '';
+  const accountEmail = session?.user?.email ?? '';
 
   const [username, setUsername] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -41,12 +43,12 @@ export default function CompleteProfileScreen() {
   });
 
   useEffect(() => {
-    if (username.trim()) return;
-    const suggestion = deriveUsernameFromLabel(remoteName);
+    if (!session?.user || username.trim()) return;
+    const suggestion = getDefaultUsernameSuggestion(session.user);
     if (suggestion) {
       setUsername(suggestion);
     }
-  }, [remoteName, username]);
+  }, [session?.user, username]);
 
   const canContinue = usernameDbReady && canSubmit && !isSubmitting;
 
@@ -83,8 +85,21 @@ export default function CompleteProfileScreen() {
         >
           <Text style={styles.title}>Choose your username</Text>
           <Text style={styles.subtitle}>
-            This is how you appear in Community and on your Home greeting. It must be unique.
+            {isSocialUser
+              ? 'This is how you appear in Community and on your Home greeting. You can change the suggestion below.'
+              : 'This is how you appear in Community and on your Home greeting. It must be unique.'}
           </Text>
+
+          {isSocialUser && (displayName || accountEmail) ? (
+            <View style={styles.accountCard}>
+              {displayName ? (
+                <Text style={styles.accountName}>{displayName}</Text>
+              ) : null}
+              {accountEmail ? (
+                <Text style={styles.accountEmail}>{accountEmail}</Text>
+              ) : null}
+            </View>
+          ) : null}
 
           {!usernameDbReady ? (
             <View style={styles.migrationBanner}>
@@ -140,6 +155,26 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
+  },
+  accountCard: {
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    gap: 4,
+    alignItems: 'center',
+  },
+  accountName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: Colors.text,
+    textAlign: 'center',
+  },
+  accountEmail: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
   },
   form: {
     marginTop: 8,

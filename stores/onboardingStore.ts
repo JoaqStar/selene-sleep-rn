@@ -38,8 +38,14 @@ interface OnboardingState {
   completeOnboarding: (username: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   loadOnboardingState: () => Promise<void>;
   loadUserProfile: (userId?: string) => Promise<void>;
+  syncOnboardingForAuthUser: (
+    userId: string | null | undefined,
+    event: 'SIGNED_IN' | 'INITIAL_SESSION' | 'SIGNED_OUT',
+  ) => Promise<void>;
   resetOnboarding: () => Promise<void>;
 }
+
+const AUTH_USER_ID_KEY = 'selene_user_id';
 
 export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   username: '',
@@ -62,6 +68,12 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       await AsyncStorage.setItem('selene_username', result.username);
       await AsyncStorage.setItem('selene_onboarded', 'true');
       await AsyncStorage.removeItem('selene_user_name');
+      if (hasSupabaseConfig && supabase) {
+        const { data: authData } = await supabase.auth.getUser();
+        if (authData.user?.id) {
+          await AsyncStorage.setItem(AUTH_USER_ID_KEY, authData.user.id);
+        }
+      }
       set({
         username: result.username,
         isOnboarded: true,
@@ -97,7 +109,7 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
         );
 
         if (!profile) {
-          set({ hasUsername: get().username.trim().length > 0 });
+          set({ hasUsername: false, username: '' });
           return;
         }
 
@@ -150,10 +162,7 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
         set(updates);
       } catch (error) {
         console.error('[Onboarding] loadUserProfile failed:', error);
-        const localUsername = get().username.trim();
-        set({
-          hasUsername: localUsername.length > 0,
-        });
+        set({ hasUsername: false });
       } finally {
         set({ profileLoading: false, profileChecked: true });
         profileLoadInFlight = null;
@@ -164,9 +173,48 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     return profileLoadInFlight;
   },
 
+  syncOnboardingForAuthUser: async (
+    userId: string | null | undefined,
+    event: 'SIGNED_IN' | 'INITIAL_SESSION' | 'SIGNED_OUT',
+  ) => {
+    if (!userId) {
+      if (event === 'SIGNED_OUT') {
+        await AsyncStorage.removeItem(AUTH_USER_ID_KEY);
+      }
+      return;
+    }
+
+    const storedUserId = await AsyncStorage.getItem(AUTH_USER_ID_KEY);
+
+    if (event === 'SIGNED_IN' && storedUserId !== userId) {
+      await AsyncStorage.multiRemove([
+        'selene_username',
+        'selene_onboarded',
+        'selene_user_name',
+      ]);
+      set({
+        username: '',
+        isOnboarded: false,
+        hasUsername: false,
+        profileChecked: false,
+      });
+      await AsyncStorage.setItem(AUTH_USER_ID_KEY, userId);
+      return;
+    }
+
+    if (event === 'INITIAL_SESSION' && !storedUserId) {
+      await AsyncStorage.setItem(AUTH_USER_ID_KEY, userId);
+    }
+  },
+
   resetOnboarding: async () => {
     try {
-      await AsyncStorage.multiRemove(['selene_username', 'selene_onboarded', 'selene_user_name']);
+      await AsyncStorage.multiRemove([
+        'selene_username',
+        'selene_onboarded',
+        'selene_user_name',
+        AUTH_USER_ID_KEY,
+      ]);
       set({
         username: '',
         isOnboarded: false,
