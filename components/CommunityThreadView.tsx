@@ -9,15 +9,18 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { Redirect } from 'expo-router';
-import { Send, ThumbsUp } from 'lucide-react-native';
+import { Send, ThumbsUp, Trash2 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/colors';
 import { useStreamClient } from '@/lib/hooks/useStreamClient';
 import { useAuthStore } from '@/stores/authStore';
 import { COMMUNITY_CHANNEL } from '@/lib/stream/channels';
+import { ensureCommunityChannelMembership, getCommunityChannel } from '@/lib/stream/ensureCommunityChannelMembership';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { LinkableText } from '@/components/LinkableText';
 import { hasSupabaseConfig, supabase } from '@/lib/supabase';
 
 interface ThreadMessage {
@@ -30,6 +33,24 @@ interface ThreadMessage {
   created_at: string;
   reaction_counts?: Record<string, number>;
   own_reactions?: Array<{ type: string }>;
+}
+
+function mapThreadMessage(m: {
+  id: string;
+  text?: string;
+  user?: { id: string; name?: string };
+  created_at: string;
+  reaction_counts?: Record<string, number>;
+  own_reactions?: Array<{ type: string }>;
+}): ThreadMessage {
+  return {
+    id: m.id,
+    text: m.text ?? '',
+    user: m.user ? { id: m.user.id, name: m.user.name } : undefined,
+    created_at: m.created_at,
+    reaction_counts: m.reaction_counts,
+    own_reactions: m.own_reactions,
+  };
 }
 
 type CommunityThreadViewProps = {
@@ -48,28 +69,29 @@ export function CommunityThreadView({ messageId, channelId, backLabel }: Communi
   const [error, setError] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [deletingReplyId, setDeletingReplyId] = useState<string | null>(null);
+  const [replyError, setReplyError] = useState<string | null>(null);
   const channelRef = useRef<any>(null);
   const flatListRef = useRef<FlatList>(null);
 
   const resolvedChannelId = channelId ?? COMMUNITY_CHANNEL.id;
-  const channelName = COMMUNITY_CHANNEL.name;
 
   useEffect(() => {
     if (!client || !resolvedChannelId || !messageId) return;
 
     let isSubscribed = true;
+    let tearDownListeners: (() => void) | undefined;
 
     const setupThread = async () => {
       setIsLoading(true);
       setError(null);
 
       try {
-        const ch = client.channel('messaging', resolvedChannelId, {
-          name: channelName,
-          description: COMMUNITY_CHANNEL.description,
-        } as Record<string, unknown>);
+        if (session?.access_token) {
+          await ensureCommunityChannelMembership(session.access_token);
+        }
 
-        await ch.watch();
+        const ch = await getCommunityChannel(client);
         channelRef.current = ch;
 
         let parent = (ch.state.messages ?? []).find((m: any) => m.id === messageId);
@@ -78,15 +100,6 @@ export function CommunityThreadView({ messageId, channelId, backLabel }: Communi
           parent = response.message;
         }
 
-        const mapMessage = (m: any): ThreadMessage => ({
-          id: m.id,
-          text: m.text ?? '',
-          user: m.user ? { id: m.user.id, name: m.user.name } : undefined,
-          created_at: m.created_at,
-          reaction_counts: m.reaction_counts,
-          own_reactions: m.own_reactions,
-        });
-
         if (!parent && isSubscribed) {
           setError('Post not found');
           setIsLoading(false);
@@ -94,38 +107,70 @@ export function CommunityThreadView({ messageId, channelId, backLabel }: Communi
         }
 
         if (parent && isSubscribed) {
-          setParentMessage(mapMessage(parent));
+          setParentMessage(mapThreadMessage(parent));
         }
 
         const result = await ch.getReplies(messageId, { limit: 50 });
         const rawReplies = Array.isArray(result) ? result : (result?.messages ?? []);
-        const replyList = rawReplies.map((m: any) => mapMessage(m));
+        const replyList = rawReplies.map((m: any) => mapThreadMessage(m));
         if (isSubscribed) {
           setReplies(replyList);
         }
 
-        ch.on('message.new', (event: any) => {
-          if (!isSubscribed) return;
-          const msg = event.message;
-          if (!msg || msg.parent_id !== messageId) return;
-          setReplies((prev) => [...prev, mapMessage(msg)]);
-        });
+        const appendReply = (msg: {
+          id: string;
+          parent_id?: string;
+          text?: string;
+          user?: { id: string; name?: string };
+          created_at: string;
+          reaction_counts?: Record<string, number>;
+          own_reactions?: Array<{ type: string }>;
+        }) => {
+          if (!isSubscribed || msg.parent_id !== messageId) return;
+          setReplies((prev) => {
+            if (prev.some((reply) => reply.id === msg.id)) return prev;
+            return [...prev, mapThreadMessage(msg)];
+          });
+        };
 
-        ch.on('message.updated', (event: any) => {
+        const onMessageNew = (event: { message?: { parent_id?: string } & Parameters<typeof appendReply>[0] }) => {
+          const msg = event.message;
+          if (!msg) return;
+          appendReply(msg);
+        };
+
+        const onMessageUpdated = (event: { message?: { id: string; parent_id?: string } & Parameters<typeof appendReply>[0] }) => {
           if (!isSubscribed) return;
           const msg = event.message;
           if (!msg) return;
 
           if (msg.id === messageId) {
-            setParentMessage((prev) => (prev ? mapMessage(msg) : prev));
+            setParentMessage((prev) => (prev ? mapThreadMessage(msg) : prev));
           }
 
           if (msg.parent_id === messageId) {
             setReplies((prev) =>
-              prev.map((m) => (m.id === msg.id ? mapMessage(msg) : m)),
+              prev.map((m) => (m.id === msg.id ? mapThreadMessage(msg) : m)),
             );
           }
-        });
+        };
+
+        const onMessageDeleted = (event: { message?: { id: string; parent_id?: string } }) => {
+          if (!isSubscribed) return;
+          const msg = event.message;
+          if (!msg || msg.parent_id !== messageId) return;
+          setReplies((prev) => prev.filter((reply) => reply.id !== msg.id));
+        };
+
+        ch.on('message.new', onMessageNew);
+        ch.on('message.updated', onMessageUpdated);
+        ch.on('message.deleted', onMessageDeleted);
+
+        tearDownListeners = () => {
+          ch.off('message.new', onMessageNew);
+          ch.off('message.updated', onMessageUpdated);
+          ch.off('message.deleted', onMessageDeleted);
+        };
       } catch (err) {
         console.error('[CommunityThreadView] Setup error:', err);
         if (isSubscribed) {
@@ -142,8 +187,9 @@ export function CommunityThreadView({ messageId, channelId, backLabel }: Communi
 
     return () => {
       isSubscribed = false;
+      tearDownListeners?.();
     };
-  }, [client, resolvedChannelId, messageId, channelName]);
+  }, [client, resolvedChannelId, messageId, session?.access_token]);
 
   useEffect(() => {
     if (!flatListRef.current) return;
@@ -157,16 +203,34 @@ export function CommunityThreadView({ messageId, channelId, backLabel }: Communi
 
   const handleSendReply = useCallback(async () => {
     const text = inputText.trim();
-    if (!text || !channelRef.current || isSending || !messageId) return;
+    if (!text || !client || !isClientReady || isSending || !messageId) return;
 
     setIsSending(true);
+    setReplyError(null);
     setInputText('');
 
     try {
-      await channelRef.current.sendMessage({
+      if (session?.access_token) {
+        await ensureCommunityChannelMembership(session.access_token);
+      }
+
+      const channel = channelRef.current ?? (await getCommunityChannel(client));
+      channelRef.current = channel;
+
+      const { message: sentMessage } = await channel.sendMessage({
         text,
         parent_id: messageId,
       });
+
+      if (!sentMessage?.id) {
+        throw new Error('Comment was not created');
+      }
+
+      setReplies((prev) => {
+        if (prev.some((reply) => reply.id === sentMessage.id)) return prev;
+        return [...prev, mapThreadMessage(sentMessage)];
+      });
+
       flatListRef.current?.scrollToEnd({ animated: true });
 
       if (hasSupabaseConfig && supabase && parentMessage?.user?.id && session?.user?.id) {
@@ -192,11 +256,14 @@ export function CommunityThreadView({ messageId, channelId, backLabel }: Communi
       }
     } catch (err) {
       console.error('[CommunityThreadView] Send reply error:', err);
+      const message = "Couldn't post your comment. Check your connection and try again.";
       setInputText(text);
+      setReplyError(message);
+      Alert.alert("Couldn't post comment", message);
     } finally {
       setIsSending(false);
     }
-  }, [inputText, isSending, messageId, parentMessage, session?.user?.id]);
+  }, [client, inputText, isClientReady, isSending, messageId, parentMessage, session?.access_token, session?.user?.id]);
 
   const currentUserId = session?.user?.id;
 
@@ -272,6 +339,49 @@ export function CommunityThreadView({ messageId, channelId, backLabel }: Communi
     [session?.user?.id, parentMessage, replies],
   );
 
+  const handleDeleteReply = useCallback((replyId: string) => {
+    Alert.alert(
+      'Delete comment',
+      "This can't be undone.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              if (!client) return;
+
+              let removedReply: ThreadMessage | undefined;
+              setDeletingReplyId(replyId);
+              setReplies((prev) => {
+                removedReply = prev.find((reply) => reply.id === replyId);
+                return prev.filter((reply) => reply.id !== replyId);
+              });
+
+              try {
+                await client.deleteMessage(replyId, true);
+              } catch (err) {
+                console.error('[CommunityThreadView] Delete reply error:', err);
+                if (removedReply) {
+                  setReplies((prev) => {
+                    if (prev.some((reply) => reply.id === removedReply!.id)) return prev;
+                    return [...prev, removedReply!].sort(
+                      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+                    );
+                  });
+                }
+                Alert.alert('Could not delete comment', 'Please try again.');
+              } finally {
+                setDeletingReplyId(null);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [client]);
+
   const renderMessage = useCallback(
     ({ item }: { item: ThreadMessage }) => {
       const isOwn = item.user?.id === currentUserId;
@@ -289,7 +399,12 @@ export function CommunityThreadView({ messageId, channelId, backLabel }: Communi
         <View style={[styles.messageBubbleWrap, isOwn && styles.messageBubbleWrapOwn]}>
           {!isOwn && <Text style={styles.messageSender}>{displayName}</Text>}
           <View style={[styles.messageBubble, isOwn ? styles.messageBubbleOwn : styles.messageBubbleOther]}>
-            <Text style={[styles.messageText, isOwn && styles.messageTextOwn]}>{item.text}</Text>
+            <LinkableText
+              style={[styles.messageText, isOwn && styles.messageTextOwn]}
+              linkStyle={isOwn ? styles.messageLinkOwn : styles.messageLink}
+            >
+              {item.text}
+            </LinkableText>
           </View>
           <Text style={[styles.messageTime, isOwn && styles.messageTimeOwn]}>{time}</Text>
           <View style={styles.messageActions}>
@@ -312,11 +427,26 @@ export function CommunityThreadView({ messageId, channelId, backLabel }: Communi
                 {commentCount} {commentCount === 1 ? 'comment' : 'comments'}
               </Text>
             )}
+            {isOwn && !isParent && (
+              <Pressable
+                onPress={() => handleDeleteReply(item.id)}
+                disabled={deletingReplyId === item.id}
+                style={styles.messageActionButton}
+                hitSlop={8}
+                accessibilityLabel="Delete comment"
+              >
+                {deletingReplyId === item.id ? (
+                  <ActivityIndicator size="small" color={Colors.textMuted} />
+                ) : (
+                  <Trash2 size={14} color={Colors.textMuted} />
+                )}
+              </Pressable>
+            )}
           </View>
         </View>
       );
     },
-    [currentUserId, parentMessage, replies.length, handleLikeToggle],
+    [currentUserId, parentMessage, replies.length, handleLikeToggle, handleDeleteReply, deletingReplyId],
   );
 
   if (!session) {
@@ -367,12 +497,19 @@ export function CommunityThreadView({ messageId, channelId, backLabel }: Communi
       )}
 
       <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        {replyError ? (
+          <Text style={styles.replyErrorText}>{replyError}</Text>
+        ) : null}
+        <View style={styles.inputRow}>
         <TextInput
           style={styles.textInput}
           placeholder="Add a reply..."
           placeholderTextColor={Colors.textMuted}
           value={inputText}
-          onChangeText={setInputText}
+          onChangeText={(value) => {
+            setInputText(value);
+            if (replyError) setReplyError(null);
+          }}
           multiline
           maxLength={2000}
           onSubmitEditing={handleSendReply}
@@ -393,6 +530,7 @@ export function CommunityThreadView({ messageId, channelId, backLabel }: Communi
             <Send size={18} color={inputText.trim() ? Colors.background : Colors.textMuted} />
           )}
         </Pressable>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
@@ -485,6 +623,13 @@ const styles = StyleSheet.create({
   messageTextOwn: {
     color: Colors.background,
   },
+  messageLink: {
+    color: Colors.accent,
+  },
+  messageLinkOwn: {
+    color: Colors.background,
+    textDecorationLine: 'underline',
+  },
   messageTime: {
     fontSize: 11,
     color: Colors.textMuted,
@@ -516,14 +661,22 @@ const styles = StyleSheet.create({
     color: Colors.accent,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
     paddingHorizontal: 20,
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     backgroundColor: Colors.cardBackground,
     gap: 8,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  replyErrorText: {
+    fontSize: 13,
+    color: Colors.error,
+    lineHeight: 18,
   },
   textInput: {
     flex: 1,

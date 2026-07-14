@@ -21,6 +21,19 @@
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
+        ],
+        "LSApplicationQueriesSchemes": [
+          "instagram",
+          "tiktok",
+          "snssdk1233",
+          "fb",
+          "twitter",
+          "x-twitter",
+          "youtube",
+          "vnd.youtube",
+          "linkedin",
+          "reddit",
+          "pinterest"
         ]
       }
     },

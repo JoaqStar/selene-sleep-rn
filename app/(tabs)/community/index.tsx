@@ -11,6 +11,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Search, Plus, X } from 'lucide-react-native';
@@ -26,6 +27,7 @@ import TagPillSlider from '@/components/TagPillSlider';
 import { useStreamChat } from '@/lib/hooks/useStreamChat';
 import { useCommunityStore } from '@/stores/communityStore';
 import { COMMUNITY_CHANNEL } from '@/lib/stream/channels';
+import { ensureCommunityChannelMembership, getCommunityChannel } from '@/lib/stream/ensureCommunityChannelMembership';
 import {
   CommunityTag,
   COMMUNITY_TAGS,
@@ -72,6 +74,7 @@ export default function CommunityScreen() {
   const [messages, setMessages] = useState<StreamFeedMessage[]>([]);
   const [isLoadingFeed, setIsLoadingFeed] = useState(true);
   const [feedError, setFeedError] = useState<string | null>(null);
+  const [feedRetryCount, setFeedRetryCount] = useState(0);
   const [selectedFilter, setSelectedFilter] = useState<string>('All');
   const [filterTagSearchInput, setFilterTagSearchInput] = useState('');
   const [isComposerOpen, setIsComposerOpen] = useState(false);
@@ -84,6 +87,7 @@ export default function CommunityScreen() {
   const [isClassifying, setIsClassifying] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const messagesRef = useRef<StreamFeedMessage[]>([]);
 
   useEffect(() => {
@@ -143,11 +147,14 @@ export default function CommunityScreen() {
       setFeedError(null);
       setIsLoadingFeed(true);
       try {
-        const channel = client.channel('messaging', COMMUNITY_CHANNEL.id, {
-          name: COMMUNITY_CHANNEL.name,
-          description: COMMUNITY_CHANNEL.description,
-        } as Record<string, unknown>);
-        await channel.watch();
+        if (session?.access_token) {
+          const joined = await ensureCommunityChannelMembership(session.access_token);
+          if (!joined) {
+            console.warn('[CommunityScreen] Link sharing may be unavailable until community membership succeeds');
+          }
+        }
+
+        const channel = await getCommunityChannel(client);
         channelRef.current = channel;
 
         const initial = (channel.state.messages ?? [])
@@ -184,6 +191,11 @@ export default function CommunityScreen() {
           });
           setMessages((prev) => upsertAndSortMessages(prev, mapped));
         });
+
+        channel.on('message.deleted', (event: any) => {
+          if (!isSubscribed || !event.message || event.message.parent_id) return;
+          setMessages((prev) => prev.filter((message) => message.id !== event.message.id));
+        });
       } catch (setupErr) {
         console.error('[CommunityScreen] Failed to load feed', setupErr);
         if (isSubscribed) {
@@ -200,7 +212,12 @@ export default function CommunityScreen() {
     return () => {
       isSubscribed = false;
     };
-  }, [client, isConnected]);
+  }, [client, isConnected, session?.access_token, session?.user?.id, feedRetryCount]);
+
+  const retryFeed = useCallback(() => {
+    setFeedError(null);
+    setFeedRetryCount((count) => count + 1);
+  }, []);
 
   const composerResolvedManualTags = useMemo(
     () => mergeAndDedupeTags([
@@ -419,7 +436,14 @@ export default function CommunityScreen() {
           });
         }
       } else {
-        await channel.sendMessage({
+        if (session?.access_token) {
+          await ensureCommunityChannelMembership(session.access_token);
+        }
+
+        const activeChannel = await getCommunityChannel(client);
+        channelRef.current = activeChannel;
+
+        await activeChannel.sendMessage({
           text,
           tag: resolvedTags[0],
           tags: resolvedTags,
@@ -454,6 +478,8 @@ export default function CommunityScreen() {
     isComposerAutoSelected,
     isSending,
     messages,
+    client,
+    session?.access_token,
   ]);
 
   const handleSelectComposerAuto = useCallback(() => {
@@ -513,6 +539,54 @@ export default function CommunityScreen() {
     setCustomTagInput(customTags.join(', '));
   }, [composerTopTagOptions]);
 
+  const handleDeletePost = useCallback((item: StreamFeedMessage) => {
+    Alert.alert(
+      'Delete post',
+      "This can't be undone.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              if (!client) return;
+
+              let removedPost: StreamFeedMessage | undefined;
+              setDeletingPostId(item.id);
+              setMessages((prev) => {
+                removedPost = prev.find((message) => message.id === item.id);
+                return prev.filter((message) => message.id !== item.id);
+              });
+
+              if (editingPostId === item.id) {
+                closeComposer();
+              }
+
+              try {
+                await client.deleteMessage(item.id, true);
+
+                if (removedPost?.tags.length && hasSupabaseConfig && supabase) {
+                  updateTagStats([], removedPost.tags).catch((tagStatsErr) => {
+                    console.warn('[CommunityScreen] Failed to update tag stats after delete', tagStatsErr);
+                  });
+                }
+              } catch (err) {
+                console.error('[CommunityScreen] Delete post error:', err);
+                if (removedPost) {
+                  setMessages((prev) => upsertAndSortMessages(prev, removedPost!));
+                }
+                Alert.alert('Could not delete post', 'Please try again.');
+              } finally {
+                setDeletingPostId(null);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [client, closeComposer, editingPostId]);
+
   const renderPostCard = useCallback(({ item }: { item: StreamFeedMessage }) => {
     const currentUserId = session?.user?.id;
     const isOwnPost = item.user?.id === currentUserId;
@@ -536,10 +610,12 @@ export default function CommunityScreen() {
         onLike={() => handleLikeToggle(item.id, hasLiked)}
         onComment={() => handleOpenThread(item.id)}
         onEdit={isOwnPost && !item.articlePost ? () => openComposerForEdit(item) : undefined}
+        onDelete={isOwnPost ? () => handleDeletePost(item) : undefined}
+        isDeleting={deletingPostId === item.id}
         onOpenArticle={handleOpenArticle}
       />
     );
-  }, [handleLikeToggle, handleOpenArticle, handleOpenThread, openComposerForEdit, session?.user?.id]);
+  }, [deletingPostId, handleDeletePost, handleLikeToggle, handleOpenArticle, handleOpenThread, openComposerForEdit, session?.user?.id]);
 
   if (error) {
     return (
@@ -589,7 +665,13 @@ export default function CommunityScreen() {
         <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
           <Text style={styles.errorTitle}>Couldn&apos;t load posts</Text>
           <Text style={styles.errorBody}>{feedError}</Text>
-          <Pressable onPress={retry} style={styles.retryButton}>
+          <Pressable
+            onPress={retryFeed}
+            style={({ pressed }) => [
+              styles.retryButton,
+              pressed && styles.retryButtonPressed,
+            ]}
+          >
             <Text style={styles.retryText}>Try again</Text>
           </Pressable>
         </View>

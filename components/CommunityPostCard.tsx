@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Heart, MessageCircle, Pencil, BookOpen } from 'lucide-react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { Heart, MessageCircle, Pencil, BookOpen, Trash2 } from 'lucide-react-native';
 import { Avatar } from '@/components/Avatar';
 import { Badge } from '@/components/Badge';
+import { LinkableText } from '@/components/LinkableText';
 import { palette, radius, spacing, type } from '@/constants/theme';
 
 export type CommunityPostCardData = {
@@ -27,6 +28,8 @@ type CommunityPostCardProps = {
   onLike: () => void;
   onComment: () => void;
   onEdit?: () => void;
+  onDelete?: () => void;
+  isDeleting?: boolean;
   onOpenArticle?: (articleId: string) => void;
 };
 
@@ -35,6 +38,8 @@ export function CommunityPostCard({
   onLike,
   onComment,
   onEdit,
+  onDelete,
+  isDeleting = false,
   onOpenArticle,
 }: CommunityPostCardProps) {
   return (
@@ -49,10 +54,29 @@ export function CommunityPostCard({
           {post.tags.slice(0, 3).map((tag) => (
             <Badge key={`${post.id}-${tag}`} label={tag} variant="tag" />
           ))}
-          {post.isOwnPost && !post.articlePost && onEdit ? (
-            <Pressable onPress={onEdit} hitSlop={8} style={styles.editButton}>
-              <Pencil size={14} color={palette.textMuted} />
-            </Pressable>
+          {post.isOwnPost && (onEdit || onDelete) ? (
+            <View style={styles.ownerActions}>
+              {!post.articlePost && onEdit ? (
+                <Pressable onPress={onEdit} hitSlop={8} style={styles.ownerActionButton}>
+                  <Pencil size={14} color={palette.textMuted} />
+                </Pressable>
+              ) : null}
+              {onDelete ? (
+                <Pressable
+                  onPress={onDelete}
+                  disabled={isDeleting}
+                  hitSlop={8}
+                  style={styles.ownerActionButton}
+                  accessibilityLabel="Delete post"
+                >
+                  {isDeleting ? (
+                    <ActivityIndicator size="small" color={palette.textMuted} />
+                  ) : (
+                    <Trash2 size={14} color={palette.textMuted} />
+                  )}
+                </Pressable>
+              ) : null}
+            </View>
           ) : null}
         </View>
       </View>
@@ -71,7 +95,7 @@ export function CommunityPostCard({
           ) : null}
         </Pressable>
       ) : (
-        <Text style={type.base}>{post.text}</Text>
+        <LinkableText style={type.base}>{post.text}</LinkableText>
       )}
 
       <View style={styles.actions}>
@@ -131,7 +155,13 @@ const styles = StyleSheet.create({
     maxWidth: 120,
     justifyContent: 'flex-end',
   },
-  editButton: {
+
+  ownerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  ownerActionButton: {
     padding: 4,
   },
   articleCard: {

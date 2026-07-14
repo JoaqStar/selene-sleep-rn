@@ -24,7 +24,7 @@ export function PhotoHero({
   title,
   subtitle,
   rightAction,
-  showMoon = true,
+  showMoon = false,
   style,
 }: PhotoHeroProps) {
   const insets = useSafeAreaInsets();
