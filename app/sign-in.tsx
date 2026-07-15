@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter, Redirect } from 'expo-router';
-import { View, Text, StyleSheet, TextInput, Pressable, Animated, KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Animated, Platform, ActivityIndicator, ScrollView, Keyboard } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
@@ -54,7 +54,7 @@ export default function SignInScreen() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState('');
   const [hasFocusedEmail, setHasFocusedEmail] = useState(false);
-  const scrollRef = useRef<ScrollView | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuthStore();
@@ -314,10 +314,24 @@ export default function SignInScreen() {
     outputRange: [0, -8],
   });
 
-  console.log('[DebugMagicLinkButton]', {
-    isSent,
-    hasFocusedEmail,
-  });
+  const showMagicLinkFlow = hasFocusedEmail || email.trim().length > 0;
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   if (session && !hasUsername) {
     return <Redirect href="/complete-profile" />;
@@ -328,24 +342,38 @@ export default function SignInScreen() {
       colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}
       style={styles.container}
     >
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoid}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          showMagicLinkFlow ? styles.scrollContentCompact : styles.scrollContentExpanded,
+          {
+            paddingTop: insets.top + 60,
+            paddingBottom:
+              keyboardHeight > 0
+                ? Platform.OS === 'android'
+                  ? keyboardHeight + 32
+                  : 32
+                : Math.max(insets.bottom, 16) + 24,
+          },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          ref={scrollRef}
-          style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
         <Animated.View style={[styles.moonContainer, { transform: [{ translateY: moonTranslateY }] }]}>
           <View style={styles.moonGlow}>
             <Moon size={48} color={Colors.accent} />
           </View>
         </Animated.View>
 
-        <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+        <Animated.View
+          style={[
+            styles.content,
+            !showMagicLinkFlow && styles.contentCentered,
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+          ]}
+        >
           {!isSent ? (
             <>
               <Text style={styles.title}>Welcome to Selene</Text>
@@ -363,18 +391,14 @@ export default function SignInScreen() {
                   onChangeText={(text) => {
                     setEmail(text);
                     if (error) setError('');
+                    if (text.trim()) {
+                      setHasFocusedEmail(true);
+                    }
                   }}
                   onFocus={() => {
-                    console.log('[DebugMagicLinkButton] email onFocus');
                     setHasFocusedEmail(true);
-                    setTimeout(() => {
-                      if (scrollRef.current) {
-                        scrollRef.current.scrollToEnd({ animated: true });
-                      }
-                    }, 50);
                   }}
                   onBlur={() => {
-                    console.log('[DebugMagicLinkButton] email onBlur, email value:', email);
                     if (!email.trim()) {
                       setHasFocusedEmail(false);
                     }
@@ -392,49 +416,76 @@ export default function SignInScreen() {
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-              <View style={styles.oauthContainer}>
-                <Text style={styles.oauthLabel}>Or continue with</Text>
-                <View style={styles.oauthButtonsRow}>
+              {showMagicLinkFlow ? (
+                <View style={styles.magicLinkContainer}>
                   <Pressable
-                    onPress={() => handleWebOAuthSignIn('google')}
-                    style={({ pressed }) => [
-                      styles.oauthButton,
-                      styles.oauthGoogleButton,
-                      pressed && styles.oauthButtonPressed,
-                    ]}
-                    testID="sign-in-google-button"
+                    onPress={handleSendLink}
+                    disabled={isSending}
+                    onPressIn={() => {
+                      Animated.spring(buttonScale, { toValue: 0.95, useNativeDriver: true }).start();
+                    }}
+                    onPressOut={() => {
+                      Animated.spring(buttonScale, { toValue: 1, useNativeDriver: true }).start();
+                    }}
+                    testID="sign-in-submit-button"
                   >
-                    <View style={styles.oauthButtonContent}>
-                      <GoogleLogo size={18} />
-                      <Text style={styles.oauthButtonText}>Continue with Google</Text>
-                    </View>
+                    <Animated.View style={[styles.button, { transform: [{ scale: buttonScale }], opacity: isSending ? 0.7 : 1 }]}>
+                      {isSending ? (
+                        <ActivityIndicator size="small" color={Colors.background} />
+                      ) : (
+                        <>
+                          <Text style={styles.buttonText}>Send magic link</Text>
+                          <ArrowRight size={18} color={Colors.background} />
+                        </>
+                      )}
+                    </Animated.View>
                   </Pressable>
-                  {Platform.OS === 'ios' ? (
-                    <AppleAuthentication.AppleAuthenticationButton
-                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-                      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-                      cornerRadius={14}
-                      style={styles.appleNativeButton}
-                      onPress={handleNativeAppleSignIn}
-                      testID="sign-in-apple-button"
-                    />
-                  ) : (
+                </View>
+              ) : (
+                <View style={styles.oauthContainer}>
+                  <Text style={styles.oauthLabel}>Or continue with</Text>
+                  <View style={styles.oauthButtonsRow}>
                     <Pressable
-                      onPress={() => handleWebOAuthSignIn('apple')}
+                      onPress={() => handleWebOAuthSignIn('google')}
                       style={({ pressed }) => [
                         styles.oauthButton,
-                        styles.oauthAppleButton,
+                        styles.oauthGoogleButton,
                         pressed && styles.oauthButtonPressed,
                       ]}
-                      testID="sign-in-apple-button"
+                      testID="sign-in-google-button"
                     >
                       <View style={styles.oauthButtonContent}>
-                        <Text style={styles.oauthButtonText}>Continue with Apple</Text>
+                        <GoogleLogo size={18} />
+                        <Text style={styles.oauthButtonText}>Continue with Google</Text>
                       </View>
                     </Pressable>
-                  )}
+                    {Platform.OS === 'ios' ? (
+                      <AppleAuthentication.AppleAuthenticationButton
+                        buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                        cornerRadius={14}
+                        style={styles.appleNativeButton}
+                        onPress={handleNativeAppleSignIn}
+                        testID="sign-in-apple-button"
+                      />
+                    ) : (
+                      <Pressable
+                        onPress={() => handleWebOAuthSignIn('apple')}
+                        style={({ pressed }) => [
+                          styles.oauthButton,
+                          styles.oauthAppleButton,
+                          pressed && styles.oauthButtonPressed,
+                        ]}
+                        testID="sign-in-apple-button"
+                      >
+                        <View style={styles.oauthButtonContent}>
+                          <Text style={styles.oauthButtonText}>Continue with Apple</Text>
+                        </View>
+                      </Pressable>
+                    )}
+                  </View>
                 </View>
-              </View>
+              )}
             </>
           ) : (
             <Animated.View style={{ opacity: sentFade }}>
@@ -497,35 +548,7 @@ export default function SignInScreen() {
             </Animated.View>
           )}
         </Animated.View>
-
-        {!isSent && hasFocusedEmail && (
-          <Animated.View style={[styles.footer, { opacity: fadeAnim }]}>
-            <Pressable
-              onPress={handleSendLink}
-              disabled={isSending}
-              onPressIn={() => {
-                Animated.spring(buttonScale, { toValue: 0.95, useNativeDriver: true }).start();
-              }}
-              onPressOut={() => {
-                Animated.spring(buttonScale, { toValue: 1, useNativeDriver: true }).start();
-              }}
-              testID="sign-in-submit-button"
-            >
-              <Animated.View style={[styles.button, { transform: [{ scale: buttonScale }], opacity: isSending ? 0.7 : 1 }]}>
-                {isSending ? (
-                  <ActivityIndicator size="small" color={Colors.background} />
-                ) : (
-                  <>
-                    <Text style={styles.buttonText}>Send magic link</Text>
-                    <ArrowRight size={18} color={Colors.background} />
-                  </>
-                )}
-              </Animated.View>
-            </Pressable>
-          </Animated.View>
-        )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -534,20 +557,21 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  keyboardAvoid: {
-    flex: 1,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    flexGrow: 1,
     paddingHorizontal: 32,
-    justifyContent: 'flex-start',
   },
-  footer: {
-    alignItems: 'center',
-    marginTop: 16,
+  scrollContentExpanded: {
+    flexGrow: 1,
+  },
+  scrollContentCompact: {
+    flexGrow: 0,
+  },
+  magicLinkContainer: {
+    marginTop: 24,
+    alignItems: 'stretch',
   },
   moonContainer: {
     alignItems: 'center',
@@ -562,7 +586,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   content: {
-    flex: 1,
+    width: '100%',
+  },
+  contentCentered: {
+    flexGrow: 1,
     justifyContent: 'center',
   },
   title: {
@@ -715,6 +742,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    width: '100%',
   },
   buttonText: {
     fontSize: 17,
