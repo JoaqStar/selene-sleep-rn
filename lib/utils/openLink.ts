@@ -11,12 +11,12 @@ const NATIVE_APP_LINKS: NativeAppLink[] = [
   {
     matches: (url) => /(^|\.)instagram\.com$/i.test(url.hostname),
     schemes: ['instagram'],
-    toNativeUrl: (url) => `instagram://${url.host}${url.pathname}${url.search}`,
+    toNativeUrl: (url) => url.toString(),
   },
   {
     matches: (url) => /(^|\.)tiktok\.com$/i.test(url.hostname),
     schemes: ['tiktok', 'snssdk1233'],
-    toNativeUrl: (url) => `snssdk1233://${url.host}${url.pathname}${url.search}`,
+    toNativeUrl: (url) => url.toString(),
   },
   {
     matches: (url) =>

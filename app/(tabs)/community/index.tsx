@@ -89,6 +89,7 @@ export default function CommunityScreen() {
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const messagesRef = useRef<StreamFeedMessage[]>([]);
+  const hasLoadedFeedRef = useRef(false);
 
   useEffect(() => {
     setClient(client);
@@ -98,6 +99,10 @@ export default function CommunityScreen() {
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    hasLoadedFeedRef.current = false;
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (!isConnected || !hasSupabaseConfig || !supabase) {
@@ -137,15 +142,16 @@ export default function CommunityScreen() {
 
   useEffect(() => {
     if (!client || !isConnected) {
-      setMessages([]);
-      setIsLoadingFeed(true);
       return;
     }
 
     let isSubscribed = true;
     const setupChannel = async () => {
       setFeedError(null);
-      setIsLoadingFeed(true);
+      const isInitialLoad = !hasLoadedFeedRef.current;
+      if (isInitialLoad) {
+        setIsLoadingFeed(true);
+      }
       try {
         if (session?.access_token) {
           const joined = await ensureCommunityChannelMembership(session.access_token);
@@ -204,6 +210,7 @@ export default function CommunityScreen() {
       } finally {
         if (isSubscribed) {
           setIsLoadingFeed(false);
+          hasLoadedFeedRef.current = true;
         }
       }
     };
@@ -212,10 +219,11 @@ export default function CommunityScreen() {
     return () => {
       isSubscribed = false;
     };
-  }, [client, isConnected, session?.access_token, session?.user?.id, feedRetryCount]);
+  }, [client, isConnected, session?.user?.id, feedRetryCount]);
 
   const retryFeed = useCallback(() => {
     setFeedError(null);
+    hasLoadedFeedRef.current = false;
     setFeedRetryCount((count) => count + 1);
   }, []);
 
@@ -642,7 +650,7 @@ export default function CommunityScreen() {
     );
   }
 
-  if (!isConnected || isLoadingFeed) {
+  if (isLoadingFeed && messages.length === 0) {
     return (
       <LinearGradient
         colors={[Colors.gradientStart, Colors.gradientMid, Colors.gradientEnd]}

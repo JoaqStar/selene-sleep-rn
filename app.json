@@ -2,7 +2,7 @@
   "expo": {
     "name": "Selene Sleep App",
     "slug": "selene-sleep-app",
-    "version": "1.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/selene_logo_moon.png",
     "scheme": "selenesleepapp",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.yogawakeup.selene",
-      "buildNumber": "10",
+      "buildNumber": "14",
       "usesAppleSignIn": true,
       "infoPlist": {
         "UIBackgroundModes": [
@@ -47,7 +47,7 @@
       ],
       "googleServicesFile": "./firebase/google-services.json",
       "package": "com.yogawakeup.selene",
-      "versionCode": 6,
+      "versionCode": 7,
       "useNextNotificationsApi": true
     },
     "web": {
